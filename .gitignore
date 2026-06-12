@@ -1,0 +1,10 @@
+# personal profiles distilled by 女娲 — each teammate's own, not for the shared repo
+skills/0xkaiwen/
+skills/*-profile/
+# installer backups
+.bak-*
+# editing project junk
+node_modules/
+*.wav
+*.mp4
+.DS_Store
