@@ -8,3 +8,11 @@ node_modules/
 *.wav
 *.mp4
 .DS_Store
+
+# optimization run artifacts (keep harness + eval set + desc, drop transient logs/results)
+.optimize/*.log
+.optimize/faithful*.json
+.optimize/round*.json
+.optimize/round*.log
+.optimize/mini.*
+.optimize/SKILL.md.orig
