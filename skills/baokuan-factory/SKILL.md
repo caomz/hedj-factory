@@ -1,7 +1,7 @@
 ---
 name: baokuan-factory
 description: |
-  爆款工厂：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案"的一条龙总入口。串起四件事——①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③hyperframes 把翻拍稿做成成片 ④四平台爆款文案。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / hyperframes，并在翻拍和文案两处注入你自己的 profile。
+  爆款工厂：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案"的一条龙总入口。串起四件事:①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③talking-head-edit（口播）/hyperframes（图文混剪）把翻拍稿/录音做成成片 ④四平台爆款文案。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / talking-head-edit / hyperframes，并在翻拍和文案两处注入你自己的 profile。
   什么时候用（要 pushy 一点别漏触发，但只在"整条链路 / 团队上手"时当入口）：
   - 团队新人 onboarding，"装一下 / clone 了这套爆款翻拍 skill 不知道下一步 / 怎么开始用 / 要不要装依赖"——本 skill 亲自带 onboarding（查依赖 + 用女娲蒸馏你自己），别只顾自己跑 bash。
   - "我要开始做爆款翻拍 / 搭翻拍流程 / 从对标视频到成片到文案走一遍 / 系统化做翻拍号"。
@@ -24,13 +24,14 @@ description: |
                                                   （表达DNA + 从夯到拉品味）
                                                           │ 反复复用，注入下游
 线B（每条视频）video-distill 蒸馏「别人的爆款」
-   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 〔hyperframes 成片〕 → 四平台文案◄注入②口吻
+   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 〔录制 → talking-head-edit 口播成片 / hyperframes 图文混剪〕 → 四平台文案◄注入②口吻
 ```
 
 依赖的子 skill（install.sh 已一并装好）：
 - **nuwa-skill**（女娲造人）——蒸馏一个人的思维操作系统成一个 Skill。这里用来蒸馏**用户自己**。
 - **video-distill**（视频蒸馏）——取片/转写/拆解/翻拍角度/四平台文案。线B 的主力。
-- **hyperframes 全家桶**（hyperframes / -cli / -registry / gsap / website-to-hyperframes）——把翻拍稿做成 HTML 视频合成并渲染成片。
+- **talking-head-edit**（口播剪辑）——把真人出镜录好的口播做成带双语字幕 + 卡片 + 顶部章节条 + 可换主题的成片，内置合成引擎和踩过的坑。**口播号的主力成片工具**。
+- **hyperframes 全家桶**（hyperframes / -cli / -registry / gsap / website-to-hyperframes）——把图文/动画/混剪类做成 HTML 视频合成并渲染（talking-head-edit 底层也用它）。
 
 详细全流程图见本 skill 同级或仓库的 `docs/SOP.md`。
 
@@ -74,10 +75,10 @@ description: |
 - 用它给原视频每个论点打档（夯/哈/拉），定翻拍打法：正着翻、反着锐评、还是元视频。写进 `拆解.md` 的「翻拍角度」节。
 - 落差就在这：注入的是**立场**——用户站哪、锐评什么。
 
-**Step 3 · 成片**（hyperframes）
-- 把翻拍稿/分镜交给 hyperframes：用 HTML 合成（字幕、转场、音频驱动、TTS 旁白等），`hyperframes render` 出 mp4。
-- 细节全在 hyperframes / hyperframes-cli skill 里，按它走。本 skill 只负责"拆解+翻拍稿就绪 → 转交 hyperframes"。
-- 纯口播/真人出镜的不需要 hyperframes，可跳过本步直接发；hyperframes 主要解决"图文/动画/混剪"类成片。
+**Step 3 · 成片**（按形态选 skill）
+- **真人出镜口播（talking head）** → 用户照翻拍稿录好竖屏口播,把录音 mp4 交给 **talking-head-edit**:它产出双语字幕 + 卡片（截图/数字对决/名人金句/真访谈片段/大字标题）+ 顶部章节进度条 + 可换主题,`hyperframes render` 出成片。内置引擎和踩过的坑(**字幕逐字贴音频**、卡片要密要权威、**渲染前先出 review.html 给用户审**、终版用 standard 别 high)。这是口播号的主路径。
+- **图文/动画/纯混剪（无真人或大量动效）** → 直接用 **hyperframes** 全家桶手写 HTML 合成。
+- 两条底层都是 hyperframes 渲染;talking-head-edit 给口播一套现成的字幕+卡片引擎,不用从零写 HTML。
 
 **Step 4 · 四平台文案**（video-distill Phase 5）← **注入② 口吻**
 - 先 `Read` 用户 profile，重点读「表达 DNA」「价值观与反模式」。
