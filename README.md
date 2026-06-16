@@ -8,14 +8,15 @@
 线A（一次性）  女娲蒸馏「你自己」 ──► 你的表达DNA + 品味（skills/<你>/SKILL.md）
                                               │ 反复复用
 线B（每条视频）video-distill 蒸馏「别人的爆款」
-   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 成片(口播=talking-head-edit / 图文=hyperframes) → 四平台文案◄注入②口吻
+   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 写翻拍稿 → 成片(口播=talking-head-edit / 图文=hyperframes) → 四平台文案◄注入②口吻
 ```
 
-四件事，一个入口（`baokuan-factory` orchestrator）串起来：
+五件事，一个入口（`baokuan-factory` orchestrator）串起来：
 1. **蒸馏你自己**（nuwa-skill / 女娲）——把你的思维方式和说话风格蒸馏成一个可复用 profile。一次性。
-2. **蒸馏对标爆款**（video-distill）——取片、whisper 转写、拆出"它为什么火"的骨架和手法。
-3. **成片**——口播号(真人出镜)走 **talking-head-edit**(双语字幕 + 卡片素材 + 章节条 + 可换主题，内置引擎和踩过的坑)；图文/动画/混剪走 **hyperframes** 全家桶。两条底层都是 hyperframes 渲染。
-4. **四平台文案**（video-distill）——抖音/视频号/小红书（中）+ X（英），用你自己的人设口吻。
+2. **蒸馏对标爆款**（video-distill）——取片、whisper 转写、拆出"它为什么火"的骨架和手法 → `案例库/<slug>/拆解.md`。
+3. **写翻拍稿**（video-distill Phase 3.5）——个人元素审计 → 洗稿换人 → 黄金 5 秒 hook，产出 **`口播/<片名>/翻拍稿.md`**（能照着念的逐字脚本）。**这步最容易被漏，漏了就没东西可录、没法成片。**
+4. **成片**——口播号(真人出镜)走 **talking-head-edit**(双语字幕 + 卡片素材 + 章节条 + 可换主题，内置引擎和踩过的坑)；图文/动画/混剪走 **hyperframes** 全家桶。两条底层都是 hyperframes 渲染。
+5. **四平台文案**（video-distill）——抖音/视频号/小红书（中）+ X（英），用你自己的人设口吻。
 
 ## 安装（团队同事看这里）
 
@@ -30,6 +31,7 @@ cd baokuan-factory
 
 依赖（install.sh 会检查，缺了给你 brew 命令）：
 `ffmpeg`、`whisper-cpp`、`yt-dlp`、`python3`、`bun`。
+外加一个**软依赖 gstack `/browse`**（视频号取片 + 成片抓素材截图都靠它）：不是 brew 包，找团队拿来装到 `~/.claude/skills/`。没有它：视频号改备选下载、截图手动塞进 `build/news/`。install.sh 会顺带报它在不在。
 
 ## 怎么用
 

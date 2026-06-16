@@ -39,6 +39,12 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   printf "      brew install"; for m in "${MISSING[@]}"; do printf " %s" "$m"; done; printf "\n"
   warn "（bun 若 brew 装不了：curl -fsSL https://bun.sh/install | bash）"
 fi
+# 软依赖：gstack /browse（视频号取片 + 成片抓素材截图都靠它）。不是 brew 包，装不了就报一下。
+if [ -d "$HOME/.claude/skills/browse" ] || [ -d "$HOME/.claude/skills/gstack" ]; then
+  ok "gstack /browse — 已装（视频号取片 + 抓素材截图可用）"
+else
+  warn "gstack /browse 没装：视频号取不了片、成片抓不了素材截图。它是内部 skill 包（非 brew），找团队拿来装到 ~/.claude/skills/。"
+fi
 echo
 
 # --- 2. install skills -------------------------------------------------------

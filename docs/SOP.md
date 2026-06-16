@@ -28,9 +28,11 @@
 ║                         │  〔中性：跟你是谁无关〕                     ║
 ║  Step2 翻拍角度    ◄─────┤ 注入①「从夯到拉」品味 = 立场             ║
 ║         给每个论点打 tier，定打法（正翻 / 反着锐评 / 元视频）         ║
-║  Step3 成片             │  口播→talking-head-edit / 图文→hyperframes ║
+║  Step3 写翻拍稿         │  Phase 3.5 洗稿 ─► 口播/<片名>/翻拍稿.md   ║
+║         个人元素审计→换人→黄金5秒 hook（别漏！没稿没法录没卡片）     ║
+║  Step4 成片             │  口播→talking-head-edit / 图文→hyperframes ║
 ║         字幕+卡片素材+章节条+主题，HTML 合成→render→成片 mp4         ║
-║  Step4 四平台文案  ◄─────┘ 注入②「表达 DNA」口吻 = 说话方式         ║
+║  Step5 四平台文案  ◄─────┘ 注入②「表达 DNA」口吻 = 说话方式         ║
 ║         抖音/视频号/小红书(中) + X(英)，各 2-3 备选                   ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
@@ -38,36 +40,45 @@
 ## 一句话 SOP
 
 1. **女娲先蒸馏你自己** → `skills/<你>/SKILL.md`。一次性建的资产，后面每条视频都复用。
-2. **取片 + 转写 + 拆解**（video-distill Phase 0-3）→ 把别人的爆款变成可读文字 + "为什么火"的骨架。**这步中性**，跟谁翻拍无关。
-3. **翻拍角度**（Step 2）→ **第一次读你的 profile**：用「从夯到拉」给每个论点打档，决定正翻还是反着锐评。注入的是**立场**。
-4. **成片** → 口播号(真人出镜)走 **talking-head-edit**：录好竖屏口播交给它，配双语字幕 + 卡片素材(用 `/browse` 抓权威截图存 `news/`) + 章节条 + 主题，渲染前先出 `review.html` 给用户审。卡片/组件/主题的规格全在 `talking-head-edit/engine/DESIGN.md`(单一真源)。图文/混剪走 **hyperframes** 手写 HTML。
-5. **四平台文案**（Step 4）→ **第二次读你的 profile**：用「表达 DNA」口吻写四平台标题+正文+hashtag。注入的是**口吻**。
+2. **取片 + 转写 + 拆解**（video-distill Phase 0-3）→ `案例库/<slug>/拆解.md`。把别人的爆款变成可读文字 + "为什么火"的骨架。**这步中性**，跟谁翻拍无关。
+3. **翻拍角度**（Step 2）→ **第一次读你的 profile**：用「从夯到拉」给每个论点打档，决定正翻还是反着锐评。写进 `拆解.md`。注入的是**立场**（只是角度，不是稿）。
+4. **写翻拍稿**（Step 3，video-distill Phase 3.5）→ **`口播/<片名>/翻拍稿.md`**。个人元素审计 → 洗稿，把原作者换成你自己，开头黄金 5 秒 hook。**这步最常被漏掉，漏了就没东西可录、没法成片**——「角度」不是能念的稿。
+5. **成片**（Step 4）→ 口播号(真人出镜)走 **talking-head-edit**：照 `翻拍稿.md` 录好竖屏口播交给它，配双语字幕 + 卡片素材(用 `/browse` 抓权威截图存 `build/news/`) + 章节条 + 主题，渲染前先出 `review.html` 给用户审。卡片/组件/主题的规格全在 `talking-head-edit/engine/DESIGN.md`(单一真源)。图文/混剪走 **hyperframes** 手写 HTML。
+6. **四平台文案**（Step 5）→ **第二次读你的 profile**：用「表达 DNA」口吻写四平台标题+正文+hashtag。注入的是**口吻**。
 
 ## 两个注入点为什么分开
 
 | 注入点 | 读 profile 的哪部分 | 作用 |
 |--------|------------------|------|
 | Step 2 翻拍角度 | 从夯到拉 / 核心心智模型 | **内容立场**——站哪、锐评什么、反着做哪点 |
-| Step 4 平台文案 | 表达 DNA / 反模式 | **说话方式**——梗、节奏、忌讳词 |
+| Step 5 平台文案 | 表达 DNA / 反模式 | **说话方式**——梗、节奏、忌讳词 |
 
-**立场**和**口吻**是两回事。拆开注入，才能"同一条拆解，换个人设重新发一遍"而不用重做——比如小红书想走另一个人设（认知长文 lens），只换 Step 4 的 profile，Step 2 的拆解和品味骨架不动。
+**立场**和**口吻**是两回事。拆开注入，才能"同一条拆解，换个人设重新发一遍"而不用重做——比如小红书想走另一个人设（认知长文 lens），只换 Step 5 的 profile，Step 2 的拆解和品味骨架不动。（Step 3 写翻拍稿也会读「表达 DNA」给稿子定调，但它产出的是脚本本身，不在这张"换人设只动两处"的表里。）
 
-## 产物落位（每条视频）
+## 产物落位（两棵树，别混）
+
+蒸馏一棵、生产一棵。蒸馏 → `案例库/<slug>/`；翻拍稿 + 成片 → `口播/<片名>/`。
 
 ```
-案例库/<slug>/
-├── video.mp4          软链到原片
-├── audio.wav          16k 单声道（转写用）
-├── caption.srt/.txt   字幕 + 纯文稿
-├── source.txt         来源链接 + 下载方式 + 规格
-├── 拆解.md            ★核心：选题/骨架/手法/金句/论点分档/翻拍角度
-└── 平台文案.md        抖音/视频号/小红书/X 标题+正文+hashtag
+案例库/<slug>/              # 读懂别人（每条对标视频一个）
+├── video.mp4              软链到原片
+├── audio.wav  caption.srt/.txt  source.txt
+└── 拆解.md                ★选题/骨架/手法/金句/翻拍角度(立场)
+
+口播/<片名>/                # 做自己的成片（每条要发的成片一个）
+├── 翻拍稿.md              ★能照着念的逐字脚本（Step 3 产出，别漏）
+├── build/                talking-head-edit 引擎：news/ 素材、字幕、卡片、渲染
+│   └── news/ naval/ fonts/ widgets.json theme.json index.html review.html
+├── <片名>-成片.mp4        终版
+└── 平台文案.md            抖音/视频号/小红书/X 标题+正文+hashtag
 ```
 
-成片 mp4 放同一文件夹或 hyperframes 工程目录。
+一条蒸馏可对多条成片：一个 `案例库/<slug>/` ↔ 多个 `口播/<片名>/`。
 
 ## 排错
 
-- **视频号下载**：用 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链 curl 直下。别上 mitmproxy。
-- **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。whisper 模型复用机器已有的。
+- **拆完没翻拍稿、没法成片**：最常见的断链——别漏 **Step 3 写翻拍稿**（`口播/<片名>/翻拍稿.md`）。「翻拍角度」只是立场，不是能念的稿。
+- **没卡片/没截图**：八成是没翻拍稿（→没录音→talking-head-edit 没被触发），或没 gstack `/browse`。先补稿、补素材再成片。
+- **视频号下载**：用 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链 curl 直下。别上 mitmproxy。需要 gstack `/browse` 驱动解析器。
+- **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。gstack `/browse` 是内部 skill 包（非 brew），找团队拿。whisper 模型复用机器已有的。
 - **profile 注入不准**：Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错。重蒸或改标记文件。

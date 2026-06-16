@@ -57,6 +57,7 @@ description: |
 - 每段/每条开头 → `titlecard` 大字砸入报幕
 - 结尾 → `recap` 逐条点亮总结
 卡片类型和字段全在 DESIGN.md「卡片 widget 系统」。**截图要权威源**(官网/权威媒体/Wikipedia),用 gstack `/browse` 抓,存 `news/`。时间点要对上他说那句话(早了晚了都出戏)。卡片之间时间别重叠(都在 top:140 区)。
+**没 `/browse` 时别硬凑**:gstack 没装就抓不了截图。这时**不要出没素材的空卡、也不要拿不相干的图凑**——直接告诉用户"我这没 /browse,抓不了截图",让他装 gstack 或把需要的截图手动放进 `news/`,你再套卡片。素材缺了,成片质感直接塌,值得停下来要。
 
 ### 4. 主题 + 字体
 `theme.json` 选配色(Claude 暖 / Linear 冷 / 双色 / Vercel,见 DESIGN.md;无则默认琥珀)。
