@@ -19,6 +19,7 @@
 在 `口播/<片名>/build/` 下：
 
 ```bash
+ENG=~/.claude/skills/talking-head-edit/engine    # 引擎目录(装好后的位置)，下面命令都用 $ENG 调
 # 0) 准备：video.mp4 软链到本片成片素材；案例参考见 案例库/
 # 1) 转写（复用本地 whisper turbo 模型，别重下）
 ffmpeg -y -i video.mp4 -ar 16000 -ac 1 -c:a pcm_s16le audio.wav
@@ -36,13 +37,14 @@ python3 make_groups.py                          # → groups.full.json
 # 4) 抓证据截图(/browse)存 news/，编辑 widgets.json（卡片类型+时间+内容）
 #    字体子集：Google Fonts css2 ?...&text=<本片字符> 取 woff2 存 fonts/
 
-# 5) 构建 + 校验
-python3 ../../../引擎/口播/build_caps.py groups.full.json
+# 5) 构建 + 审阅 + 校验
+python3 "$ENG/build_caps.py" groups.full.json     # → index.html(套主题)
+python3 "$ENG/review_page.py"                     # → review.html，open 一下让用户先审
 npx hyperframes lint                              # 0 error
 
-# 6) 渲染：迭代用 draft（~4min），定稿才 high（~13min）
-npx hyperframes render --quality draft                       # 预览
-npx hyperframes render --quality high --fps 60 --output ../<片名>-成片.mp4   # 终版
+# 6) 渲染：迭代用 draft（~6min），审过出终版(默认 standard)
+npx hyperframes render --quality draft --output draft.mp4              # 预览
+npx hyperframes render --quality standard --output ../<片名>-成片.mp4   # 终版(要超清才 --quality high --fps 60)
 ```
 
 ## 关键纪律

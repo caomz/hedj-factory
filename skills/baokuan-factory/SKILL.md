@@ -35,11 +35,23 @@ description: |
 
 详细全流程图见本 skill 同级或仓库的 `docs/SOP.md`。
 
-## 开工前：先判断用户在哪一步（决策树）
+## 开工前：第 0 步永远是「拉最新」（每次都做）
 
-按顺序自检，落在第一个不满足的地方就从那开始：
+**每次触发本 skill，动手前先跑一次同步**，把团队公共仓库拉到最新再开工——这样谁改了引擎/拆解套路/卡片样式，全队下一次用就自动拿到，不会各人跑各人的旧版：
 
-1. **装好了吗？** 检查 `~/.claude/skills/` 下是否有 `nuwa-skill`、`video-distill`、`hyperframes`。缺 → 让用户在仓库根跑 `./install.sh`（或指 README）。
+```bash
+bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
+```
+
+它**永不阻塞**:离线 / 没装过 / 有本地改动 → 打一行提示就退，用当前版本继续。只有真拉到新 commit 才会重装（"已是最新"是 1 秒空操作）。看到它说"拉到更新…已更新到最新"，就知道这次用的是最新版；本次更新下次触发才完全生效（当前对话已加载旧 SKILL.md），如果它报告有重大更新，可提示用户重开一轮。
+
+> 为什么放第 0 步：这套是给团队用的，引擎和套路一直在迭代。靠每人记得手动 `git pull` 必然有人落后；把"先同步"焊死在每次开工的第一步，才能保证全队跑同一个版本。标记文件 `~/.baokuan-factory/repo` 由 `install.sh` 写入，sync 靠它找到仓库。
+
+## 然后：判断用户在哪一步（决策树）
+
+同步完，按顺序自检，落在第一个不满足的地方就从那开始：
+
+1. **装好了吗？** 检查 `~/.claude/skills/` 下是否有 `nuwa-skill`、`video-distill`、`talking-head-edit`、`hyperframes`。缺 → 让用户在仓库根跑 `./install.sh`（或指 README）。
 2. **依赖齐吗？** `ffmpeg`、`whisper-cli`、`yt-dlp`、`bun`、`python3`。缺 → `install.sh` 会列出来，提示 `brew install ...`。
 3. **蒸馏过自己吗？** 读 `~/.baokuan-factory/profile`（一行，指向用户自己的 profile SKILL.md 路径）。
    - 文件不存在或指向的文件不在 → 走 **Phase O**（一次性 onboarding）。
@@ -76,9 +88,15 @@ description: |
 - 落差就在这：注入的是**立场**——用户站哪、锐评什么。
 
 **Step 3 · 成片**（按形态选 skill）
-- **真人出镜口播（talking head）** → 用户照翻拍稿录好竖屏口播,把录音 mp4 交给 **talking-head-edit**:它产出双语字幕 + 卡片（截图/数字对决/名人金句/真访谈片段/大字标题）+ 顶部章节进度条 + 可换主题,`hyperframes render` 出成片。内置引擎和踩过的坑(**字幕逐字贴音频**、卡片要密要权威、**渲染前先出 review.html 给用户审**、终版用 standard 别 high)。这是口播号的主路径。
+- **真人出镜口播（talking head）** → 用户照翻拍稿录好竖屏口播,把录音 mp4 交给 **talking-head-edit**:它产出双语字幕 + 卡片 widget + 顶部章节进度条 + 可换主题,`hyperframes render` 出成片。这是口播号的主路径。**别把素材/卡片当事后装饰——它是成片质感的命根子,跟字幕同等重要**,所以这一步明确包含三件事(都以 talking-head-edit 的引擎为准,见下「素材与样式的真源」):
+  - **素材收集**:他每提一个术语/人/产品/数字/电影,就得配一张权威截图。用 gstack `/browse` 抓官网/权威媒体/Wikipedia 的图,存进本片 `build/news/`(截图)、`build/naval/`(剪入的真访谈片段)。素材要**权威、清晰、对题**,别拿不相干首页凑数。
+  - **卡片样式(widget)**:`news`(大字 stat/截图)、`duel`(左小灰 vs 右大金的数字/概念对决)、`quote`(名人金句)、`clip`(真访谈片段)、`book`(海报+大字)、`titlecard`(报幕大字坑)、`recap`(逐条点亮总结)。卡片要**密**(参考片几乎每几秒一张)、时间对齐他说那句话。
+  - **组件/视觉样式**:主题配色(Claude 暖 / Linear 冷 / Vercel / 琥珀)、双语字幕 a/b 样式与描金、顶部章节进度条、字体子集。
+  - 纪律:**字幕逐字贴音频**(翻拍稿只兜底)、**渲染前先出 `review.html` 给用户审**(素材权不权威/卡片对不对/主题色/时间点)、终版用 standard 别盲上 high。
 - **图文/动画/纯混剪（无真人或大量动效）** → 直接用 **hyperframes** 全家桶手写 HTML 合成。
 - 两条底层都是 hyperframes 渲染;talking-head-edit 给口播一套现成的字幕+卡片引擎,不用从零写 HTML。
+
+> **素材与样式的真源(别在本 skill 里复制一份)**:卡片字段、组件样式、主题、素材收集纪律的**权威定义全在 talking-head-edit 引擎里**,装好后在 `~/.claude/skills/talking-head-edit/engine/`:`DESIGN.md`(颜色/字体/字幕/卡片/章节/主题的完整规范)、`build_caps.py`(各卡片实际怎么渲)、`review_page.py`(素材+卡片审阅页)、`make_groups.template.py`(字幕模板)。本 skill 只点名"这一步要做素材收集+套卡片/组件样式",**具体规格一律去读引擎的 `DESIGN.md`**——这样样式只有一处真源,迭代不漂移。
 
 **Step 4 · 四平台文案**（video-distill Phase 5）← **注入② 口吻**
 - 先 `Read` 用户 profile，重点读「表达 DNA」「价值观与反模式」。

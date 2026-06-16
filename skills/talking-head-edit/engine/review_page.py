@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # 设计系统 / 素材审阅页：把本片的主题色 + 全部素材 + 全部卡片(静态渲染) + 字幕样例
 # 摆成一张 review.html，渲染前先让用户审。复用 index.html 里已生成好的卡片(主题已套)。
-# 用法：先 build_caps.py 生成 index.html，再跑 `python3 ../../../引擎/口播/review_page.py`
+# 用法：在本片 build/ 里，先 build_caps.py 生成 index.html，再跑
+#   python3 ~/.claude/skills/talking-head-edit/engine/review_page.py
+#   (脚本读当前目录 CWD;装好后引擎在 ~/.claude/skills/talking-head-edit/engine/)
 import re, json, pathlib, base64
 HERE = pathlib.Path('.')
 idx = (HERE / "index.html").read_text(encoding="utf-8")

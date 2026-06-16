@@ -11,9 +11,8 @@ description: |
 
 > 把一条录好的口播做成有双语字幕 + 丰富卡片 + 章节条的高级成片。本 skill 是开机流程 + 踩过的坑。
 >
-> **引擎在哪**:脚本和风格规范在本 skill 的 `engine/`(装好后是 `~/.claude/skills/talking-head-edit/engine/`)。
-> 0xKaiwen 的 clipping 仓库里也镜像一份在 `引擎/口播/`,那边各片 `build/` 用相对路径 `<ENG>/` 调。
-> 下文用 `<ENG>` 代指这个引擎目录,按你所在仓库替换。**动手前先读 `<ENG>/DESIGN.md`**(颜色/字体/字幕/卡片/章节/主题)。
+> **引擎在哪**:脚本和风格规范在本 skill 的 `engine/`,装好后是 `~/.claude/skills/talking-head-edit/engine/`。
+> 下文用 `<ENG>` 代指这个引擎目录,即 `~/.claude/skills/talking-head-edit/engine`(可以 `export ENG=~/.claude/skills/talking-head-edit/engine`,后面命令直接用 `$ENG`)。**动手前先读 `<ENG>/DESIGN.md`**(颜色/字体/字幕/卡片/章节/主题)。
 
 ## 工程结构
 

@@ -45,24 +45,36 @@ echo
 bold "2) 安装 skills 到 $DEST"
 mkdir -p "$DEST"
 TS="$(date +%Y%m%d-%H%M%S)"
+# 备份放到 skills 目录【外面】——放里面的话，带 SKILL.md 的备份会被当成一个幽灵重复 skill 加载。
+BAK="$HOME/.baokuan-factory/backups/$TS"
 for d in "$SRC"/*/; do
   name="$(basename "$d")"
   target="$DEST/$name"
-  if [ -e "$target" ]; then
+  if [ -L "$target" ]; then
+    # symlink = 有人把这个 skill 链到自己的开发副本(比如 hyperframes 维护者)。别动它，
+    # 否则每次自动同步都会把他的开发链接覆盖成冻结的副本。
+    warn "${name} 是 symlink（指向 $(readlink "$target")），保留本地开发链接，不覆盖。"
+  elif [ -e "$target" ]; then
     if [ "$FORCE" -eq 1 ]; then
-      mv "$target" "$DEST/.bak-$name-$TS"
-      cp -R "$d" "$target"; ok "$name（已覆盖，旧版备份到 .bak-$name-$TS）"
+      mkdir -p "$BAK"; mv "$target" "$BAK/${name}"
+      cp -R "$d" "$target"; ok "${name}（已覆盖，旧版备份到 ~/.baokuan-factory/backups/${TS}/）"
     else
-      warn "$name 已存在，跳过（要覆盖：./install.sh --force）"
+      warn "${name} 已存在，跳过（要覆盖：./install.sh --force）"
     fi
   else
-    cp -R "$d" "$target"; ok "$name"
+    cp -R "$d" "$target"; ok "${name}"
   fi
 done
 echo
 
-# --- 3. next steps -----------------------------------------------------------
-bold "3) 装好了。下一步："
+# --- 3. record repo location (lets the skill auto-pull latest on every use) ---
+mkdir -p "$HOME/.baokuan-factory"
+printf "%s\n" "$HERE" > "$HOME/.baokuan-factory/repo"
+ok "记下仓库位置 → ~/.baokuan-factory/repo（之后每次用 skill 会自动从这里拉最新）"
+echo
+
+# --- 4. next steps -----------------------------------------------------------
+bold "4) 装好了。下一步："
 cat <<'EOF'
   在 Claude Code 里说一句任意触发：
     · 第一次用 → "用爆款工厂帮我 onboarding"（会先装/查依赖 + 用女娲蒸馏你自己）
