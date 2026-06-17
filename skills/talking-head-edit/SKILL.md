@@ -33,9 +33,13 @@ description: |
 
 ## 流程(SOP)
 
-### 0. 准备
-`mkdir -p build && cd build`,`ln -sf <录音.mp4> video.mp4`,抽音频:
+### 0. 准备 + 静音裁剪(★先 trim 再转写,顺序别反)
+`mkdir -p build && cd build`。**先把原片的静音收紧再开工**,口播停顿多,不剪整片拖沓:
+`python3 <ENG>/cut_silence.py ../<录音.mp4> 0000_tight.mp4`(>0.5s 静音收到 ~0.18s 呼吸,出 `silence_keep.json`)。
+然后 `ln -sf 0000_tight.mp4 video.mp4`(**video.mp4 指向 tight,不是原片**),再抽音频:
 `ffmpeg -y -i video.mp4 -ar 16000 -ac 1 -c:a pcm_s16le audio.wav`
+> **为什么先剪**:后面字幕/卡片/章节的时间全长在这条紧凑时间轴上,天然对齐。**反了**(先在原片建好再想剪)就得拿 `silence_keep.json` 把每个时间戳 remap 过去(数学等价但是返工,ai-layoff 那次就返工了)。
+> 渲出来发现某句尾被吃掉,在 `cut_silence.py` 的 `PROTECT` 里加一个时间窗再跑。
 
 ### 1. 转写(复用本地 whisper turbo,别重下)
 `whisper-cli -m <turbo模型> -l zh -f audio.wav -oj -of seg` → seg.json
