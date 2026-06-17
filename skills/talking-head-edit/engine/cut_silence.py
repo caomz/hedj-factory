@@ -10,9 +10,11 @@ import subprocess, re, sys, json, pathlib
 
 SRC = sys.argv[1] if len(sys.argv) > 1 else "../video.mp4"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "tight.mp4"
-NOISE = "-30dB"     # 静音判定门限（室噪地板，按录音环境调）
-MIN_SIL = 0.5       # 只处理超过 0.5s 的静音
-PAD = 0.09          # 每侧保留 0.09s => 收紧后残留约 0.18s 呼吸
+NOISE = "-40dB"     # 静音判定门限。★必须明显低于"说话平均音量"，否则吃句尾字。
+#   先 `ffmpeg -i SRC -af volumedetect -f null -` 看 mean_volume，门限设到比它再低 ~7dB。
+#   (这条车内录音 mean -33dB,用 -30dB 直接吃了 29 个句尾字;-40dB 才干净。)
+MIN_SIL = 0.6       # 只处理超过 0.6s 的静音
+PAD = 0.20          # 每侧保留 0.20s 呼吸(护住句尾尾音,别设太小)
 FR = 30             # 帧率
 # 教训：句尾词的尾音会掉到门限以下被当成静音切掉(如"怎么这么堵"的"堵")。
 # 把会误切的原始时间窗填进 PROTECT(t0,t1)：落在窗内的静音整段不裁,保住句尾词 + 包袱后停顿。
@@ -66,3 +68,4 @@ r = subprocess.run(cmd, capture_output=True, text=True)
 if r.returncode != 0:
     print(r.stderr[-2000:]); sys.exit(1)
 print(f"写出 {OUT}")
+print("★剪完必验:抽 tight 音频转写,和原片转写 diff;掉了句尾字 => 门限再调低 5dB 重剪。")

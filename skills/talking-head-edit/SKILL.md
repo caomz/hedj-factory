@@ -33,22 +33,35 @@ description: |
 
 ## 流程(SOP)
 
-### 0. 准备 + 静音裁剪(★先 trim 再转写,顺序别反)
+### 0. 准备 + 静音裁剪(★先 trim 再转写,顺序别反;★剪完必验)
 `mkdir -p build && cd build`。**先把原片的静音收紧再开工**,口播停顿多,不剪整片拖沓:
-`python3 <ENG>/cut_silence.py ../<录音.mp4> 0000_tight.mp4`(>0.5s 静音收到 ~0.18s 呼吸,出 `silence_keep.json`)。
-然后 `ln -sf 0000_tight.mp4 video.mp4`(**video.mp4 指向 tight,不是原片**),再抽音频:
-`ffmpeg -y -i video.mp4 -ar 16000 -ac 1 -c:a pcm_s16le audio.wav`
-> **为什么先剪**:后面字幕/卡片/章节的时间全长在这条紧凑时间轴上,天然对齐。**反了**(先在原片建好再想剪)就得拿 `silence_keep.json` 把每个时间戳 remap 过去(数学等价但是返工,ai-layoff 那次就返工了)。
-> 渲出来发现某句尾被吃掉,在 `cut_silence.py` 的 `PROTECT` 里加一个时间窗再跑。
+1. **先看说话音量**:`ffmpeg -i ../<录音.mp4> -af volumedetect -f null -` 看 `mean_volume`。
+2. **设门限**:`cut_silence.py` 的 `NOISE` 要**明显低于 mean_volume(再低 ~7dB)**,否则吃句尾字。默认 `-40dB`(车内/外景 mean 约 -33dB 适用;安静棚里 mean 高,可上 -45dB)。
+   `python3 <ENG>/cut_silence.py ../<录音.mp4> 0000_tight.mp4`(出 `silence_keep.json`)。
+3. **必验,别跳**:抽 tight 音频转写一遍,和原片转写 diff。**掉了句尾字 = 门限太高(太靠近说话音量),调低 5dB 重剪**:
+   ```
+   ffmpeg -y -i 0000_tight.mp4 -ar 16000 -ac 1 audio.wav   # tight 音频
+   whisper-cli -m <turbo> -l zh -f audio.wav -oj -of seg
+   # 和原片 seg 比字数,差几个句尾字就重剪(ai-layoff 第一版 -30dB 吃了 29 个句尾字,-40dB 才干净)
+   ```
+4. `ln -sf 0000_tight.mp4 video.mp4`(**video.mp4 指向 tight,不是原片**)。
+> **为什么先剪**:后面字幕/卡片/章节时间全长在紧凑时间轴上,天然对齐。**反了**(先在原片建好再想剪)就得拿 `silence_keep.json` 把每个时间戳 remap 过去(数学等价但返工)。
+> **`cut_silence` 会吃字的原理**:句尾尾音淡出,音量掉到门限以下被当成静音切掉。门限离说话音量越近、吃得越狠。所以宁可门限低、剪得少,也别吃字。个别句尾还被吃,往 `PROTECT` 加时间窗。
 
-### 1. 转写(复用本地 whisper turbo,别重下)
-`whisper-cli -m <turbo模型> -l zh -f audio.wav -oj -of seg` → seg.json
+### 1. 转写(复用本地 whisper turbo,别重下;★两种都要)
+`whisper-cli -m <turbo模型> -l zh -f audio.wav -oj -of seg`            → `seg.json`(自然分句,给切字幕用)
+`whisper-cli -m <turbo模型> -l zh -f audio.wav -ml 1 -oj -of words`    → `words.json`(**词级,给 align.py 对齐用,别省**)
 本机模型常在 `/opt/homebrew/share/whisper-cpp/ggml-large-v3-turbo.bin`。
 
 ### 2. 字幕(最容易翻车的一步,见纪律)
-写 `build/make_groups.py`:从 seg.json 合并出自然分段(`groups.raw.json`),再产出 `groups.full.json`。
+写 `build/make_groups.py`:从 seg.json 合并出自然分段(`groups.raw.json`),再产出 authored 字幕组。
 **铁律:`cn = FIX.get(i, RAW[i]['cn'])`**,默认就是 whisper 逐字原话,`FIX` 字典只改**同音错字**(画术→话术、那玩儿→纳瓦尔、自动画→自动化、产品名 ASR 错音→真名)和用 `|` 把含两句的段切开。**绝不往翻拍稿/书面语改**。翻拍稿只在 whisper garbled、听不出他说啥时兜底参照术语。`META[i]=(en,style,hl,enhl)`,英文是翻译可自由,`style` a/b(b 给钩子/金句/坑标题/punchline),`hl` 描金只给数字+关键词(每组 0-2 个)。
-自检:`grep` groups.full.json 无残留 `|`;抽几句对照 groups.raw.json 没改词。(模板见 `<ENG>/make_groups.template.py`)
+**★时间用 align.py 词级对齐,别用段时间按字数比例分**(比例分会让多句段里的字幕和音频对不上,看着像"字被吞"):
+```
+python3 make_groups.py                                   # 先出 authored 组(时间先随便填/留空)
+python3 <ENG>/align.py groups.authored.json groups.full.json   # difflib 把每组对到 words.json 的真实词时间
+```
+自检:`grep` groups.full.json 无残留 `|`;抽几句对照 groups.raw.json 没改词;抽几句对照音频时间点对得上。(模板见 `<ENG>/make_groups.template.py`)
 
 ### 3. 卡片要密、要权威(学 TzFilm)
 写 `widgets.json`。**别只在金句处放一两张**,参考片几乎每几秒一张卡。他每提到一个术语/人/产品/数字/电影,就配一张:
