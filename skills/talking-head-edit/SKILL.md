@@ -60,7 +60,10 @@ description: |
 **没 `/browse` 时别硬凑**:gstack 没装就抓不了截图。这时**不要出没素材的空卡、也不要拿不相干的图凑**——直接告诉用户"我这没 /browse,抓不了截图",让他装 gstack 或把需要的截图手动放进 `news/`,你再套卡片。素材缺了,成片质感直接塌,值得停下来要。
 
 ### 4. 主题 + 字体
-`theme.json` 选配色(Claude 暖 / Linear 冷 / 双色 / Vercel,见 DESIGN.md;无则默认琥珀)。
+**默认就把 Claude 暖拷进来**(珊瑚 `#D97757` + 暖奶白,= 0xKaiwen 口播号当前主基调),别裸跑引擎兜底:
+`cp <ENG>/theme.claude-warm.json theme.json`(或直接拷上一条片的 `build/theme.json`)。
+> ⚠️ **没 theme.json 时引擎回退到 amber `#E9B949`,那只是兜底色、不是成片基调,直接出片会和往期片色不一致**(踩过:ai-layoff 第一版没拷 theme.json,整片成了 amber,和 Claude 暖的往期片对不上)。
+> 要换别的色(Linear 靛蓝冷 / 双色红坑+真相 / Vercel 黑白,见 DESIGN.md)再改 `theme.json` 这一个文件,字幕/卡片/标题卡/进度条全跟着变。
 `python3 <ENG>/subset_fonts.py`(扫全片字符抓 4 款字体子集到 fonts/)。
 
 ### 5. 章节

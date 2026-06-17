@@ -29,7 +29,7 @@
 | `--dim` | `#6B7075` | 未播章节标签 |
 | 底部 scrim | `linear-gradient(transparent → rgba(0,0,0,.82))`，覆盖底部 46% | 字幕可读性 |
 
-**可换主题（theme.json）**：上面是默认琥珀。本片 `build/theme.json` 可整套换色，`build_caps.py` 做 token 替换（含 ink/accent 的 rgb 三元组），无 theme.json 的旧片不受影响。已沉淀「**Claude 暖**」(珊瑚 `#D97757` + 暖奶白 `#F0EDE4`，accent_rgb `217,119,87`，ink `#1C1613`)。换主题只换这一个文件，字幕/卡片/标题卡/进度条全跟着变。预设方向：Claude 暖 / Linear 靛蓝冷 / 双色(红坑+琥珀真相) / Vercel 黑白。
+**主题（theme.json）**：上面表里的 amber `#E9B949` 是**引擎兜底色**（没 `theme.json` 时回退用），**不是成片基调**。0xKaiwen 口播号**当前主基调是「Claude 暖」**(珊瑚 `#D97757` + 暖奶白 `#F0EDE4`，accent_rgb `217,119,87`，ink `#1C1613`)——**新片默认 `cp <ENG>/theme.claude-warm.json build/theme.json` 拷进来**，别裸跑 amber，否则和往期片色不一致。`build_caps.py` 读 `build/theme.json` 做 token 替换（含 ink/accent 的 rgb 三元组），换主题只换这一个文件，字幕/卡片/标题卡/进度条全跟着变。其它预设方向：Linear 靛蓝冷 / 双色(红坑+真相) / Vercel 黑白。
 
 ## 3. 字体
 

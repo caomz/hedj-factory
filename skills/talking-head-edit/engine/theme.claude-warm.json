@@ -1,0 +1,14 @@
+{
+  "_note": "Claude 暖 palette (珊瑚/赤陶 + 暖奶白) = 0xKaiwen 口播号当前主基调。新片默认 cp 这个到 build/theme.json，别裸跑引擎 amber 兜底。引擎 build_caps.py 读 build/theme.json 做 token 替换。",
+  "bone": "#F0EDE4",
+  "bone_bright": "#FAF6EE",
+  "en": "#E7E0D6",
+  "graphite": "#A8A29A",
+  "graphite2": "#C9C2B8",
+  "accent": "#D97757",
+  "ink": "#1C1613",
+  "dim": "#6B6055",
+  "weak": "#8A8276",
+  "ink_rgb": "28,22,19",
+  "accent_rgb": "217,119,87"
+}
