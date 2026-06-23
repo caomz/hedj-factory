@@ -31,7 +31,13 @@ cd baokuan-factory
 
 依赖（install.sh 会检查，缺了给你 brew 命令）：
 `ffmpeg`、`whisper-cpp`、`yt-dlp`、`python3`、`bun`。
-外加一个**软依赖 gstack `/browse`**（视频号取片 + 成片抓素材截图都靠它）：不是 brew 包，找团队拿来装到 `~/.claude/skills/`。没有它：视频号改备选下载、截图手动塞进 `build/news/`。install.sh 会顺带报它在不在。
+外加一个**软依赖 gstack `/browse`**（视频号取片 + 成片抓素材截图都靠它，是成片质感的命根子）。`brew` 装不了，但它是**公开仓库**（[github.com/garrytan/gstack](https://github.com/garrytan/gstack)，MIT），**不用找团队要**，自己一行装（需 Bun v1.0+ 和 Git）：
+
+```bash
+git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup
+```
+
+装完重开一轮 Claude Code 生效，升级用 `/gstack-upgrade`。没有它也能跑：视频号改备选下载、截图手动塞进 `build/news/`。`install.sh` 会顺带报它在不在、并打这条命令。
 
 ## 怎么用
 

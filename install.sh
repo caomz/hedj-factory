@@ -39,11 +39,14 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   printf "      brew install"; for m in "${MISSING[@]}"; do printf " %s" "$m"; done; printf "\n"
   warn "（bun 若 brew 装不了：curl -fsSL https://bun.sh/install | bash）"
 fi
-# 软依赖：gstack /browse（视频号取片 + 成片抓素材截图都靠它）。不是 brew 包，装不了就报一下。
+# 软依赖：gstack /browse（视频号取片 + 成片抓素材截图都靠它）。brew 装不了，但是公开仓库，自己一行装。
 if [ -d "$HOME/.claude/skills/browse" ] || [ -d "$HOME/.claude/skills/gstack" ]; then
   ok "gstack /browse — 已装（视频号取片 + 抓素材截图可用）"
 else
-  warn "gstack /browse 没装：视频号取不了片、成片抓不了素材截图。它是内部 skill 包（非 brew），找团队拿来装到 ~/.claude/skills/。"
+  warn "gstack /browse 没装：视频号取不了片、成片抓不了素材截图（成片质感命根子）。"
+  warn "brew 装不了，但它是公开仓库（github.com/garrytan/gstack），自己一行装（需 Bun v1.0+ 和 Git）："
+  printf "      git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup\n"
+  warn "（装完重开一轮 Claude Code 生效；临时不装也能跑：视频号改备选下载、截图手动塞进 build/news/）"
 fi
 echo
 

@@ -224,3 +224,4 @@ N. **结尾**：<怎么收的，开放式还是给答案，留没留互动>
 - `ffmpeg`、`whisper-cli`（whisper.cpp）：`brew install ffmpeg whisper-cpp`
 - 已有 whisper 模型优先复用，脚本会自动找。
 - 取片：`curl`（视频号明文真链直下）、`yt-dlp`（YouTube/抖音）、gstack `/browse`（驱动在线解析器）。视频号解析器 https://sph.litao.workers.dev/ 。
+- **gstack `/browse` 怎么装**：`brew` 装不了，但它是**公开仓库**（github.com/garrytan/gstack），不用找团队要，一行装（需 Bun v1.0+ 和 Git）：`git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`。装完重开一轮生效。没有它：视频号改备选工具 `github.com/ltaoo/wx_channels_download`（见 Phase 0）。

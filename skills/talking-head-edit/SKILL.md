@@ -109,3 +109,4 @@ hyperframes 整条时间轴渲染、**无增量**:改一处=全片重渲 → 批
 
 ## 依赖
 `ffmpeg`、`whisper-cli`、`node>=22`、`npx hyperframes`、Python(`fontTools`/`PIL`/`brotli`)、gstack `/browse`(抓截图)。引擎与风格规范见 `<ENG>/DESIGN.md` 与 `<ENG>/README.md`。
+> **gstack `/browse` 怎么装**:`brew` 装不了,但它是**公开仓库**(github.com/garrytan/gstack),不用找谁要,一行装(需 Bun v1.0+ 和 Git):`git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`。装完重开一轮生效。临时不装:让用户把权威截图手动放进 `news/`,你再套卡片(别出空卡)。

@@ -80,5 +80,6 @@
 - **拆完没翻拍稿、没法成片**：最常见的断链——别漏 **Step 3 写翻拍稿**（`口播/<片名>/翻拍稿.md`）。「翻拍角度」只是立场，不是能念的稿。
 - **没卡片/没截图**：八成是没翻拍稿（→没录音→talking-head-edit 没被触发），或没 gstack `/browse`。先补稿、补素材再成片。
 - **视频号下载**：用 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链 curl 直下。别上 mitmproxy。需要 gstack `/browse` 驱动解析器。
-- **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。gstack `/browse` 是内部 skill 包（非 brew），找团队拿。whisper 模型复用机器已有的。
+- **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。whisper 模型复用机器已有的。
+- **gstack `/browse` 怎么装**：`brew` 装不了，但它是**公开仓库**（github.com/garrytan/gstack），**不用找团队要**，自己一行装（需 Bun v1.0+ 和 Git）：`git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`。装完重开一轮生效，升级用 `/gstack-upgrade`。临时不装也能跑：视频号改备选下载、截图手动塞进 `build/news/`。
 - **profile 注入不准**：Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错。重蒸或改标记文件。

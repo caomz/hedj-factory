@@ -53,7 +53,11 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 
 1. **装好了吗？** 检查 `~/.claude/skills/` 下是否有 `nuwa-skill`、`video-distill`、`talking-head-edit`、`hyperframes`。缺 → 让用户在仓库根跑 `./install.sh`（或指 README）。
 2. **依赖齐吗？** `ffmpeg`、`whisper-cli`、`yt-dlp`、`bun`、`python3`。缺 → `install.sh` 会列出来，提示 `brew install ...`。
-   - **还有一个软依赖容易漏:gstack `/browse`**(检查 `~/.claude/skills/browse` 或 `~/.claude/skills/gstack` 在不在)。它管两件事:**取片时驱动视频号解析器**、**成片时抓素材截图**。`brew` 装不了(gstack 是内部 skill 包,不是公开包)——没有就让用户找团队拿 gstack 装上,或在需要截图的步骤手动提供图。`install.sh` 也会顺带报一下它在不在。
+   - **还有一个软依赖容易漏:gstack `/browse`**(检查 `~/.claude/skills/gstack` 或 `~/.claude/skills/browse` 在不在)。它管两件事:**取片时驱动视频号解析器**、**成片时抓素材截图**——成片质感的命根子。`brew` 装不了,但**别被"内部包"带偏**:它是**公开仓库**(github.com/garrytan/gstack,MIT),不用找谁要,自己一行装(需 Bun v1.0+ 和 Git;Bun 见上一条):
+     ```
+     git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup
+     ```
+     `./setup` 会把 `/browse` 等装进 `~/.claude/skills/`,**装完重开一轮 Claude Code** 才生效(当前会话已加载旧 skill 列表)。**临时不装也能跑**:视频号取片改备选工具(video-distill Phase 0 列了 `wx_channels_download`),抓截图改手动塞——让用户把权威截图存进本片 `build/news/`,你再套卡片。`install.sh` 也会顺带报它在不在、并打这条命令。详见排错区「没 gstack」。
 3. **蒸馏过自己吗？** 读 `~/.baokuan-factory/profile`（一行，指向用户自己的 profile SKILL.md 路径）。
    - 文件不存在或指向的文件不在 → 走 **Phase O**（一次性 onboarding）。
    - 存在且有效 → 直接进 **Phase 1**，把该 profile 当注入源。
@@ -155,7 +159,11 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 - **视频号下载**：别上 mitmproxy。用在线解析器 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链直接 curl。详见 video-distill Phase 0。
 - **缺 ffmpeg/whisper**：`brew install ffmpeg whisper-cpp`。whisper 模型优先复用机器上已有的，别重复下。
 - **缺 yt-dlp / bun**：`brew install yt-dlp`；bun 见 install.sh。
-- **没 gstack `/browse`**：视频号取不了片、成片抓不了素材截图。gstack 是内部 skill 包，找团队拿来装（`~/.claude/skills/gstack`）。临时没有：视频号改备选下载工具，截图让用户手动塞进 `build/news/`。
+- **没 gstack `/browse`**：视频号取不了片、成片抓不了素材截图（成片质感命根子）。gstack `brew` 装不了，但它是**公开仓库**（github.com/garrytan/gstack，MIT），**不用找团队要**，自己一行装（需 Bun v1.0+ 和 Git）：
+  ```
+  git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup
+  ```
+  `./setup` 会把 `/browse` 等装进 `~/.claude/skills/`，**装完重开一轮 Claude Code** 生效；升级用 `/gstack-upgrade`。**临时没有照样能跑**：视频号取片改备选下载工具，截图让用户手动塞进 `build/news/`，别因此跳过素材或拿空卡糊弄。
 - **拆完没有"翻拍稿"、没法成片**：这是最常见的断链——别跳过 **Step 3 写翻拍稿**（产出 `口播/<片名>/翻拍稿.md`）。「翻拍角度」只是立场，不是能念的稿。
 - **没卡片/没截图**：八成是上一条（没翻拍稿就没录音、talking-head-edit 没被触发），或没 `/browse`。先补翻拍稿、补素材，再成片。
 - **profile 注入不准**：八成是 Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错了。重蒸或改标记文件。
