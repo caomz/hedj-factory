@@ -22,6 +22,7 @@ secrets.env
 **/secrets.env
 
 __pycache__/
-scripts/logs/
+logs/
+f2-*.log
 *.pyc
 scripts/err.log
