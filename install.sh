@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# baokuan-factory installer — copies the bundled skills into ~/.claude/skills/
+# baokuan-factory installer — symlinks the bundled skills into ~/.claude/skills/
 # and checks for the external tools the pipeline needs.
 #
+# 为什么 symlink 不 cp：① 改源即时生效，不用反复 reinstall；② 别的安装器（如 gstack
+# setup）重写 ~/.claude/skills 时，symlink 受保护、拷贝会被删掉（6/22 就是这么丢的）。
+#
 # Usage:
-#   ./install.sh            # install (skips skills that already exist)
-#   ./install.sh --force    # overwrite existing skills (backs them up first)
+#   ./install.sh            # symlink 部署（已是正确 symlink 就跳过；拷贝型会备份后换成 symlink）
+#   ./install.sh --force    # 连"指向别处的 symlink"也强制改指到本仓库（慎用）
 #
 set -euo pipefail
 
@@ -59,19 +62,24 @@ BAK="$HOME/.baokuan-factory/backups/$TS"
 for d in "$SRC"/*/; do
   name="$(basename "$d")"
   target="$DEST/$name"
+  link_to="${d%/}"                       # 源 skill 的绝对路径
   if [ -L "$target" ]; then
-    # symlink = 有人把这个 skill 链到自己的开发副本(比如 hyperframes 维护者)。别动它，
-    # 否则每次自动同步都会把他的开发链接覆盖成冻结的副本。
-    warn "${name} 是 symlink（指向 $(readlink "$target")），保留本地开发链接，不覆盖。"
-  elif [ -e "$target" ]; then
-    if [ "$FORCE" -eq 1 ]; then
-      mkdir -p "$BAK"; mv "$target" "$BAK/${name}"
-      cp -R "$d" "$target"; ok "${name}（已覆盖，旧版备份到 ~/.baokuan-factory/backups/${TS}/）"
+    cur="$(readlink "$target")"
+    if [ "$cur" = "$link_to" ]; then
+      ok "${name}（已 symlink，跳过）"
+    elif [ "$FORCE" -eq 1 ]; then
+      rm -f "$target"; ln -s "$link_to" "$target"; ok "${name}（symlink 改指到本仓库）"
     else
-      warn "${name} 已存在，跳过（要覆盖：./install.sh --force）"
+      # 指向别处的 symlink（比如 hyperframes 维护者链到自己的开发副本）——别动它。
+      warn "${name} 是 symlink（指向 ${cur}），保留本地开发链接，不覆盖。"
     fi
+  elif [ -e "$target" ]; then
+    # 真目录/拷贝 → 备份后换成 symlink（治本：gstack 再清洗也冲不掉，改源即时生效）
+    mkdir -p "$BAK"; mv "$target" "$BAK/${name}"
+    ln -s "$link_to" "$target"
+    ok "${name}（拷贝→已备份到 ~/.baokuan-factory/backups/${TS}/，改为 symlink）"
   else
-    cp -R "$d" "$target"; ok "${name}"
+    ln -s "$link_to" "$target"; ok "${name}（symlink）"
   fi
 done
 echo

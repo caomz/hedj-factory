@@ -16,3 +16,12 @@ node_modules/
 .optimize/round*.log
 .optimize/mini.*
 .optimize/SKILL.md.orig
+
+# 取片个人敏感配置（cookie 等）— 永不进仓库；模板是 secrets.example.env
+secrets.env
+**/secrets.env
+
+__pycache__/
+scripts/logs/
+*.pyc
+scripts/err.log
