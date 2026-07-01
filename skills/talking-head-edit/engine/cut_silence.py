@@ -60,8 +60,12 @@ pathlib.Path("silence_keep.json").write_text(json.dumps(
     {"src_dur":dur,"out_dur":round(dur-removed,3),"keep":keep,"noise":NOISE,
      "min_sil":MIN_SIL,"pad":PAD}, ensure_ascii=False, indent=1), encoding="utf-8")
 
+# ★密关键帧:每 30 帧(1s)一个 I 帧、关掉场景切换插帧,并强制恒定 30fps。
+#   否则 x264 默认 GOP 稀疏(关键帧间隔可达 6s+),hyperframes 渲染时 seek 会失败/画面冻结
+#   （渲染日志报 "sparse keyframes ... seek failures and frame freezing"）。
 cmd = ["ffmpeg","-y","-i",SRC,"-vf",vf,"-af",af,
        "-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",
+       "-r",str(FR),"-g",str(FR),"-keyint_min",str(FR),"-sc_threshold","0",
        "-c:a","aac","-b:a","192k","-movflags","+faststart", OUT]
 print("ffmpeg 重编码中…")
 r = subprocess.run(cmd, capture_output=True, text=True)
