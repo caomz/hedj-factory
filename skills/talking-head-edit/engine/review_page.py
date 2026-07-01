@@ -39,11 +39,21 @@ if news.exists():
             b = base64.b64encode(p.read_bytes()).decode()
             ext = p.suffix.lstrip(".").replace("jpg","jpeg")
             assets += f'<div class="asset"><img src="data:image/{ext};base64,{b}"><div class="alab">{p.name}</div></div>'
-naval = HERE / "naval"
+# 剪入片段 = b-roll 视频。约定放 clips/;旧约定 naval/ 仍兼容(历史遗留,别再新建 naval/)。
+clip_dir = (HERE / "clips") if (HERE / "clips").exists() else (HERE / "naval")
 clips = ""
-if naval.exists():
-    for p in sorted(naval.glob("*.mp4")):
+if clip_dir.exists():
+    for p in sorted(clip_dir.glob("*.mp4")):
         clips += f'<div class="alab">🎬 {p.name}</div>'
+
+# 素材区块:只在真有卡片截图或剪入片段时才显示,空文件夹不再冒出那行标题。
+asset_block = ""
+if assets or clips:
+    asset_block = (
+        "<h2>素材 · 卡片截图(news/) + 剪入片段(clips/)</h2>"
+        f'<div class="row">{assets}</div><div class="row" style="margin-top:10px">{clips}</div>'
+        '<p class="note">检查：素材是否权威/清晰、是否对得上要讲的点、有没有水印/版权问题。</p>'
+    )
 
 # 卡片：原生尺寸(968px)，单列，逐张标注。最高保真，任何浏览器都稳。
 cards = "".join(
@@ -79,9 +89,7 @@ h2:first-child{{margin-top:0}}
 </style></head><body>
 <h2>主题配色 · {T.get('_note','默认琥珀')}</h2>
 <div class="row">{swatches}</div>
-<h2>素材库 news/ + 剪入片段 naval/</h2>
-<div class="row">{assets}</div><div class="row" style="margin-top:10px">{clips}</div>
-<p class="note">检查：素材是否权威/清晰、是否对得上要讲的点、有没有水印/版权问题。</p>
+{asset_block}
 <h2>卡片 widgets（{len(wg_lines)} 张，按出现顺序）</h2>
 <div class="grid">{cards}</div>
 <p class="note">检查：每张卡的文字/数字对不对、上没上对主题色、时间点对不对、左右居中对不对。</p>

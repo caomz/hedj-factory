@@ -25,7 +25,7 @@ description: |
   theme.json       # 主题配色(可选，缺省=琥珀)
   chapters.json    # 章节(video_dur + [[t0,t1,label],...])
   news/            # 卡片用的截图/封面(权威源)
-  naval/           # 剪入的真访谈片段(muted B-roll)
+  clips/           # 剪入的 b-roll 片段(muted，*.mp4；旧约定 naval/ 仍兼容)
   fonts/ seg.json index.html review.html
   video.mp4 → 录音文件
 ```
@@ -53,15 +53,29 @@ description: |
 `whisper-cli -m <turbo模型> -l zh -f audio.wav -ml 1 -oj -of words`    → `words.json`(**词级,给 align.py 对齐用,别省**)
 本机模型常在 `/opt/homebrew/share/whisper-cpp/ggml-large-v3-turbo.bin`。
 
-### 2. 字幕(最容易翻车的一步,见纪律)
-写 `build/make_groups.py`:从 seg.json 合并出自然分段(`groups.raw.json`),再产出 authored 字幕组。
-**铁律:`cn = FIX.get(i, RAW[i]['cn'])`**,默认就是 whisper 逐字原话,`FIX` 字典只改**同音错字**(画术→话术、那玩儿→纳瓦尔、自动画→自动化、产品名 ASR 错音→真名)和用 `|` 把含两句的段切开。**绝不往翻拍稿/书面语改**。翻拍稿只在 whisper garbled、听不出他说啥时兜底参照术语。`META[i]=(en,style,hl,enhl)`,英文是翻译可自由,`style` a/b(b 给钩子/金句/坑标题/punchline),`hl` 描金只给数字+关键词(每组 0-2 个)。
-**★时间用 align.py 词级对齐,别用段时间按字数比例分**(比例分会让多句段里的字幕和音频对不上,看着像"字被吞"):
+### 2. 字幕(最容易翻车的一步,反复犯,见纪律)
+
+**★★ 头号铁律:字幕基底 = whisper `seg.json` 逐字原文,从 RAW 起改,绝不脱离 RAW 凭记忆/翻拍稿手写。**
+犯过多次的根因就是"手写 authored 时把翻拍稿当底稿默写",结果漏整句、并句、删 filler、书面化(把"各个"改"个个"、"操蛋班子"改"草台班子"、漏掉"MicroStrategy/其实说真的/跟他产生共鸣"、把"老头儿,老登对吧"删成"老登")。**录音里他说的每个字、每个 filler(然后/呢/吧/其实/各个/对吧)、每处口误,默认全留。**
+
+正确做法(两条路径都必须以 seg 原文为基底):
+- **路径A(推荐,有 RAW 保护)**:写 `build/make_groups.py`,从 seg.json 出 `groups.raw.json`,`cn = FIX.get(i, RAW[i]['cn'])` —— 默认 RAW 原话,`FIX` 字典只动少数 index。
+- **路径B(align 手写 authored)**:**先把 seg.json 的逐字原文一句句贴进 authored 当 cn,再只改同音错字**,不准从翻拍稿默写。
+
+**只有这几种才改字,改前必回查 script(不靠脑补)**:
+1. **同音错字 / ASR garbled**:去 `seg.json` 看 whisper 原转,拿不准断点去 `words.json`(词级,`-ml 1`)核;实在听不出他说啥,才用翻拍稿兜底参照术语(画术→话术、自动画→自动化、产品名 ASR 错音→真名、塞着→Saylor、缩哈→梭哈、币还→闭环)。
+2. **明显口误的专名/词**(一端→低端、ChairGPT→ChatGPT),改成正确同义形。
+3. 用 `|` 把含两句的段切开。
+**禁止**:并句、删 filler、改语序、改成翻拍稿/书面语、漏句、补录音里没有的字。
+
+`META[i]=(en,style,hl,enhl)`,英文是翻译可自由,`style` a/b(b 给钩子/金句/punchline),`hl` 描金只给数字+关键词(每组 0-2 个)。
+**★时间用 align.py 词级对齐,别用段时间按字数比例分**:
 ```
-python3 make_groups.py                                   # 先出 authored 组(时间先随便填/留空)
+python3 make_groups.py                                   # 或手写 groups.authored.json(cn 必须贴 seg 原文)
 python3 <ENG>/align.py groups.authored.json groups.full.json   # difflib 把每组对到 words.json 的真实词时间
 ```
-自检:`grep` groups.full.json 无残留 `|`;抽几句对照 groups.raw.json 没改词;抽几句对照音频时间点对得上。(模板见 `<ENG>/make_groups.template.py`)
+**自检(逐条,不是抽样)**:把 groups.full.json 的每条 cn 和 seg.json 原文并排过一遍,确认没漏句、没并句、没书面化、filler 都在;`grep` 无残留 `|`;hl 都是 cn 子串。
+**审阅页**:生成一个 Claude 暖风格的「字幕审阅.html」(逐条列 序号/时间/中文描金/英文,金句卡高亮),让用户 `open` 逐字核对录音,点头再渲染。别拿成片去试错。
 
 ### 3. 卡片要密、要权威(学 TzFilm)
 写 `widgets.json`。**别只在金句处放一两张**,参考片几乎每几秒一张卡。他每提到一个术语/人/产品/数字/电影,就配一张:
@@ -91,7 +105,7 @@ python3 <ENG>/align.py groups.authored.json groups.full.json   # difflib 把每�
 python3 <ENG>/build_caps.py groups.full.json   # → index.html(套主题)
 python3 <ENG>/review_page.py                   # → review.html
 ```
-`review.html` 把**主题色板 + 全部素材(news/naval) + 全部卡片(静态原生渲染) + 字幕 A/B 样例**摆成一页。让用户 `open review.html` 审一遍:素材权不权威/清不清晰、卡片文字数字对不对、上没上对主题色、左右居不居中、时间点对不对、字幕逐不逐字。**用户点头再渲染**,别拿 18 分钟的 high 去试错。
+`review.html` 把**主题色板 + 全部素材(news/ + clips/) + 全部卡片(静态原生渲染) + 字幕 A/B 样例**摆成一页。让用户 `open review.html` 审一遍:素材权不权威/清不清晰、卡片文字数字对不对、上没上对主题色、左右居不居中、时间点对不对、字幕逐不逐字。**用户点头再渲染**,别拿 18 分钟的 high 去试错。
 
 ### 7. 校验 + 渲染
 `npx hyperframes lint`(0 error)。**先 draft 自己抽帧验**(~6min),审过再出终版:
