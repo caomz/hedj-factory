@@ -1,6 +1,6 @@
 # 爆款工厂 · baokuan-factory
 
-把**别人的爆款短视频**变成**你自己口吻的成片 + 全平台文案**的一条龙。一个 Claude Code skill 集合 + 一键安装。
+把**别人的爆款短视频**变成**你自己口吻的成片 + 全平台文案 + 一键发号**的一条龙。一个 Claude Code skill 集合 + 一键安装。
 
 ## 它干什么
 
@@ -8,15 +8,16 @@
 线A（一次性）  女娲蒸馏「你自己」 ──► 你的表达DNA + 品味（skills/<你>/SKILL.md）
                                               │ 反复复用
 线B（每条视频）video-distill 蒸馏「别人的爆款」
-   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 写翻拍稿 → 成片(口播=talking-head-edit / 图文=hyperframes) → 四平台文案◄注入②口吻
+   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 写翻拍稿 → 成片(口播=talking-head-edit / 图文=hyperframes) → 四平台文案◄注入②口吻 → 一键发号(抖音/小红书/视频号)
 ```
 
-五件事，一个入口（`baokuan-factory` orchestrator）串起来：
+六件事，一个入口（`baokuan-factory` orchestrator）串起来：
 1. **蒸馏你自己**（nuwa-skill / 女娲）——把你的思维方式和说话风格蒸馏成一个可复用 profile。一次性。
 2. **蒸馏对标爆款**（video-distill）——取片、whisper 转写、拆出"它为什么火"的骨架和手法 → `案例库/<slug>/拆解.md`。
 3. **写翻拍稿**（video-distill Phase 3.5）——个人元素审计 → 洗稿换人 → 黄金 5 秒 hook，产出 **`口播/<片名>/翻拍稿.md`**（能照着念的逐字脚本）。**这步最容易被漏，漏了就没东西可录、没法成片。**
 4. **成片**——口播号(真人出镜)走 **talking-head-edit**(双语字幕 + 卡片素材 + 章节条 + 可换主题，内置引擎和踩过的坑)；图文/动画/混剪走 **hyperframes** 全家桶。两条底层都是 hyperframes 渲染。
 5. **四平台文案**（video-distill）——抖音/视频号/小红书（中）+ X（英），用你自己的人设口吻。
+6. **一键发号**（social-auto-upload / `sau` CLI，可选）——把成片+文案发到抖音/小红书/视频号。真浏览器自动化（不是 API），先扫码登录、cookie 会过期。**发布是对外不可逆动作，发前会跟你确认。** 视频号目前只发视频。
 
 ## 安装（团队同事看这里）
 
@@ -39,6 +40,14 @@ git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.cl
 
 装完重开一轮 Claude Code 生效，升级用 `/gstack-upgrade`。没有它也能跑：视频号改备选下载、截图手动塞进 `build/news/`。`install.sh` 会顺带报它在不在、并打这条命令。
 
+还有一个**只有最后一步"一键发号"才用的软依赖：social-auto-upload（`sau` CLI）**。不装不影响成片+文案。公开仓库（[github.com/dreammis/social-auto-upload](https://github.com/dreammis/social-auto-upload)，MIT，需 `uv` + `python3.10~3.12`），一段装：
+
+```bash
+cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright" .venv/bin/patchright install chromium && cp conf.example.py conf.py
+```
+
+装完各平台 `sau <平台> login --account <你> --headed` 扫码登录。**首次登录若报错是 upstream 已知 bug，打本仓库带的补丁**：`cd ~/Desktop/workplace/social-auto-upload && git apply <你的 baokuan-factory clone>/docs/patches/social-auto-upload-login-fixes.patch`（细节见 [`docs/SOP.md`](docs/SOP.md) 排错「发布」）。`install.sh` 也会报它在不在。
+
 ## 怎么用
 
 装完，打开 Claude Code，说一句话就行（skill 会自动触发）：
@@ -47,6 +56,8 @@ git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.cl
   → 它先查依赖，再用女娲蒸馏**你自己**（你给 X/小红书/播客等链接），产出你的 profile，记到 `~/.baokuan-factory/profile`。
 - **翻拍一条** → "我要翻拍这条视频 `<对标链接>`，做成我自己口吻的成片和文案"
   → 拆解 → 用你的品味定翻拍角度 → hyperframes 成片 → 四平台文案。
+- **发出去** → "把这条成片发到抖音/小红书/视频号"
+  → 用 social-auto-upload（`sau`）先查登录、再传成片+文案。发前会跟你确认发哪些号、立即还是定时。**要装 social-auto-upload，见下方依赖。**
 
 完整流程和"为什么这么设计"见 [`docs/SOP.md`](docs/SOP.md)。
 
@@ -59,6 +70,7 @@ git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.cl
 | `video-distill` | 本仓库 | 取片/转写/拆解/翻拍角度/四平台文案 |
 | `talking-head-edit` | 本仓库 | 口播成片引擎：双语字幕 + 卡片素材 + 章节条 + 可换主题（`engine/` 内置合成脚本 + 风格规范 `DESIGN.md`） |
 | `hyperframes` 等 5 个 | hyperframes 项目 | HTML 视频合成 + 渲染成片（talking-head-edit 底层也用它） |
+| `social-auto-upload`（`sau`） | [dreammis/social-auto-upload](https://github.com/dreammis/social-auto-upload)（外部，单独装） | 最后一环：把成片+文案一键发抖音/小红书/视频号（真浏览器自动化） |
 
 > nuwa-skill 这里是裁过的精简版（去掉了 README 的演示大图）。要完整版/更新：见上面 GitHub。
 > 你自己的 profile（`skills/<你>/SKILL.md`）是你蒸馏出来的个人资产，**不要提交进这个公共仓库**，也不要覆盖别人的。

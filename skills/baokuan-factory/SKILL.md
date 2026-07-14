@@ -1,13 +1,13 @@
 ---
 name: baokuan-factory
 description: |
-  爆款工厂：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案"的一条龙总入口。串起四件事:①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③talking-head-edit（口播）/hyperframes（图文混剪）把翻拍稿/录音做成成片 ④四平台爆款文案。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / talking-head-edit / hyperframes，并在翻拍和文案两处注入你自己的 profile。
+  爆款工厂：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案 + 一键发号"的一条龙总入口。串起五件事:①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③talking-head-edit（口播）/hyperframes（图文混剪）把翻拍稿/录音做成成片 ④四平台爆款文案 ⑤social-auto-upload 把成片+文案一键发到抖音/小红书/视频号。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / talking-head-edit / hyperframes / social-auto-upload(sau CLI)，并在翻拍和文案两处注入你自己的 profile。
   什么时候用（要 pushy 一点别漏触发，但只在"整条链路 / 团队上手"时当入口）：
   - 团队新人 onboarding，"装一下 / clone 了这套爆款翻拍 skill 不知道下一步 / 怎么开始用 / 要不要装依赖"——本 skill 亲自带 onboarding（查依赖 + 用女娲蒸馏你自己），别只顾自己跑 bash。
-  - "我要开始做爆款翻拍 / 搭翻拍流程 / 从对标视频到成片到文案走一遍 / 系统化做翻拍号"。
-  - "把这条对标视频（链接或文件）变成我自己口吻的成片和全平台文案"——要的是完整产物（成片+文案），不是单步。
+  - "我要开始做爆款翻拍 / 搭翻拍流程 / 从对标视频到成片到文案到发号走一遍 / 系统化做翻拍号"。
+  - "把这条对标视频（链接或文件）变成我自己口吻的成片和全平台文案，最好直接发出去"——要的是完整产物（成片+文案+上号），不是单步。
   - "先蒸馏我自己再批量翻拍对标号"。
-  边界（守住精度）：如果用户只要其中一步——只下载 / 只转写提字幕 / 只拆解一条视频结构 / 只写某平台文案标题 / 只蒸馏某个别人——那分别是 video-distill / nuwa-skill / hyperframes 的活，别抢；本 skill 只在要走完整链路或团队 onboarding 时当总入口。
+  边界（守住精度）：如果用户只要其中一步（只下载 / 只转写提字幕 / 只拆解一条视频结构 / 只写某平台文案标题 / 只蒸馏某个别人 / 只把一条现成的片发到某平台），那分别是 video-distill / nuwa-skill / hyperframes / social-auto-upload 的活，别抢；本 skill 只在要走完整链路或团队 onboarding 时当总入口。
 ---
 
 # 爆款工厂 · Baokuan Factory
@@ -24,14 +24,15 @@ description: |
                                                   （表达DNA + 从夯到拉品味）
                                                           │ 反复复用，注入下游
 线B（每条视频）video-distill 蒸馏「别人的爆款」
-   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 〔录制 → talking-head-edit 口播成片 / hyperframes 图文混剪〕 → 四平台文案◄注入②口吻
+   取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 〔录制 → talking-head-edit 口播成片 / hyperframes 图文混剪〕 → 四平台文案◄注入②口吻 → 一键发号（抖音/小红书/视频号）
 ```
 
-依赖的子 skill（install.sh 已一并装好）：
+依赖的子 skill / 工具（install.sh 已一并装好子 skill；social-auto-upload 是外部公开仓库，单独装，见依赖区）：
 - **nuwa-skill**（女娲造人）——蒸馏一个人的思维操作系统成一个 Skill。这里用来蒸馏**用户自己**。
 - **video-distill**（视频蒸馏）——取片/转写/拆解/翻拍角度/四平台文案。线B 的主力。
 - **talking-head-edit**（口播剪辑）——把真人出镜录好的口播做成带双语字幕 + 卡片 + 顶部章节条 + 可换主题的成片，内置合成引擎和踩过的坑。**口播号的主力成片工具**。
 - **hyperframes 全家桶**（hyperframes / -cli / -registry / gsap / website-to-hyperframes）——把图文/动画/混剪类做成 HTML 视频合成并渲染（talking-head-edit 底层也用它）。
+- **social-auto-upload**（`sau` CLI，外部公开仓库）——最后一环，把成片+文案一键发到抖音/小红书/视频号。它是**真浏览器自动化**（patchright 驱动 Chromium 模拟真人在创作者后台传，不是私有 API/抓包），所以要先扫码登录、cookie 会过期。见 **Step 6** 和依赖区。
 
 详细全流程图见本 skill 同级或仓库的 `docs/SOP.md`。
 
@@ -58,6 +59,7 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
      git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup
      ```
      `./setup` 会把 `/browse` 等装进 `~/.claude/skills/`,**装完重开一轮 Claude Code** 才生效(当前会话已加载旧 skill 列表)。**临时不装也能跑**:视频号取片改备选工具(video-distill Phase 0 列了 `wx_channels_download`),抓截图改手动塞——让用户把权威截图存进本片 `build/news/`,你再套卡片。`install.sh` 也会顺带报它在不在、并打这条命令。详见排错区「没 gstack」。
+   - **发布环节(Step 6)才需要的：social-auto-upload（`sau` CLI）**。检查 `~/Desktop/workplace/social-auto-upload` 在不在、`sau --help` 通不通。**没装不影响前面**——成片+文案照跑，只有真要一键发号时才装。装法见依赖区「发布：social-auto-upload」。
 3. **蒸馏过自己吗？** 读 `~/.baokuan-factory/profile`（一行，指向用户自己的 profile SKILL.md 路径）。
    - 文件不存在或指向的文件不在 → 走 **Phase O**（一次性 onboarding）。
    - 存在且有效 → 直接进 **Phase 1**，把该 profile 当注入源。
@@ -118,6 +120,23 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 - 用它的口吻写**抖音 / 微信视频号 / 小红书（中文）+ X（英文）**的标题+正文+hashtag，每平台 2-3 个备选。贴成片实际内容，不套空模板、不造假数据、不用长破折号。
 - 落差在这：注入的是**说话方式**——梗、节奏、忌讳词。
 
+**Step 6 · 一键分发**（social-auto-upload / `sau` CLI）← 最后一环，**可选、要显式确认才发**
+- 目标：把 `口播/<片名>/` 的终版成片，配 Step 5 的 `平台文案.md`，发到**抖音 / 小红书 / 视频号**。
+- ⚠️ **发布是对外、不可逆的动作（发出去就公开了，删了也可能被缓存/推送）。动手发之前必须把"发哪个号、哪几个平台、标题正文、立即发还是定时"逐条念给用户确认，得到明确"发"才发。**能定时/存草稿就别默认立即发。绝不自作主张群发。
+- **引擎/真源**：细节 CLI 契约不在本 skill 复制，去读装好的 social-auto-upload 仓库 `docs/CLI.md` 和 `skills/{douyin,xiaohongshu}-upload/`。原理：真浏览器自动化（patchright 驱动 Chromium 模拟真人在创作者后台传，不是私有 API/抓包），所以**要先扫码登录、cookie 会过期**。
+- 跑命令前先进仓库激活环境：`cd ~/Desktop/workplace/social-auto-upload && source .venv/bin/activate`。约定 `--account <handle>`（一个号一份 cookie，如 `kaiwen`）。
+- **三步：**
+  1. **先查登录态**（cookie 几天到两周会过期，别盲发）：`sau douyin check --account <h>` / `sau xiaohongshu check --account <h>` / `sau tencent check --account <h>`。返回 `invalid` 就重新扫码：`sau <平台> login --account <h> --headed`（douyin 扫抖音 App、xiaohongshu 扫小红书 App、tencent 扫微信；二维码窗口会弹出）。
+  2. **传视频**（标题/简介/话题从 `平台文案.md` 对应平台那份取。⚠️ 成片在工作区 `口播/<片名>/` 树里，不在 sau 仓库里，`--file` 给**成片的绝对路径**，别用相对路径）：
+     ```
+     sau douyin      upload-video --account <h> --file /绝对路径/口播/<片名>/<片名>-成片.mp4 --title "标题" --desc "简介" --tags "标签1,标签2"
+     sau xiaohongshu upload-video --account <h> --file <同一个绝对路径> --title "标题" --desc "简介" --tags "..."
+     sau tencent     upload-video --account <h> --file <同一个绝对路径> --title "标题" --desc "简介" --tags "..."
+     ```
+     定时发布加 `--schedule "YYYY-MM-DD HH:MM"`；视频号可 `--draft` 存草稿。
+  3. **平台差异**：**视频号只发得了视频**（`sau tencent` 无 `upload-note`，图文没实现，别答应发视频号图文）；**抖音/小红书视频、图文都行**，图文用 `sau <平台> upload-note --account <h> --images a.png b.png --title "..." --note "正文" --tags "..."`。
+- 发完把每个平台的链接/状态回报给用户；失败先看排错区「发布：登录/cookie/视频号」。
+
 ## 两个注入点（这是本 skill 的命根子，别跳过）
 
 | 步骤 | 读 profile 的哪部分 | 注入的是 | 为什么分开 |
@@ -151,7 +170,7 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 ```
 
 - **蒸馏 → `案例库/<slug>/`**，**翻拍稿 + 成片 → `口播/<片名>/`**。slug 用对标视频的英文短名；片名用你这条成片的名字（可中文）。
-- 平台文案 `平台文案.md` 跟成片走（放 `口播/<片名>/`）或跟拆解走都行，写清是哪条。
+- 平台文案 `平台文案.md` 跟成片走（放 `口播/<片名>/`）或跟拆解走都行，写清是哪条。Step 6 发布就从这份取每个平台的标题/正文/话题，配同目录的 `<片名>-成片.mp4` 上传。
 - 一条对标视频可能翻拍成多条成片：一个 `案例库/<slug>/` 对多个 `口播/<片名>/`，正常。
 
 ## 依赖与排错（速查）
@@ -167,3 +186,14 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 - **拆完没有"翻拍稿"、没法成片**：这是最常见的断链——别跳过 **Step 3 写翻拍稿**（产出 `口播/<片名>/翻拍稿.md`）。「翻拍角度」只是立场，不是能念的稿。
 - **没卡片/没截图**：八成是上一条（没翻拍稿就没录音、talking-head-edit 没被触发），或没 `/browse`。先补翻拍稿、补素材，再成片。
 - **profile 注入不准**：八成是 Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错了。重蒸或改标记文件。
+- **发布：social-auto-upload 装法**（Step 6 用，外部公开仓库 github.com/dreammis/social-auto-upload，MIT，`brew` 装不了，自己装。需 `uv` + `python3.10~3.12`）：
+  ```
+  cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git
+  cd social-auto-upload && uv venv --python 3.12 && uv pip install -e .          # 注册 sau 命令
+  PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright" .venv/bin/patchright install chromium
+  cp conf.example.py conf.py
+  ```
+  验证 `source .venv/bin/activate && sau --help`。三个平台各扫一次码登录后才能发（见 Step 6）。
+- **发布：cookie 失效/发不出去**：先 `sau <平台> check --account <h>`，`invalid` 就 `sau <平台> login --account <h> --headed` 重新扫码。cookie 是平台自己的会话，几天到两周会过期，**每次发之前先 check**，别盲发。
+- **发布：首次登录报错（upstream 已知 bug，本机已打补丁）**：官方仓库的登录代码有几处真 bug，fresh clone 会踩，需同样补丁（或维护带补丁的 fork）：① 抖音 `uploader/douyin_uploader/main.py` 的 `_wait_for_douyin_login` 用了未定义的 `original_url`/`saw_2fa`/`i`，秒崩 `NameError`，要在循环前补 `original_url=page.url`、`saw_2fa=False`，并把 `for _ in range` 改 `for i in range`；② douyin/xiaohongshu/tencent 三处登录 `page.goto` 加 `timeout=90000, wait_until="domcontentloaded"`（默认 30s 常超时）；③ 视频号 `uploader/tencent_uploader/main.py` 要改三处：`_build_launch_kwargs` 的 `channel="chrome"` 改 `"chromium"`、二维码改「截主页面里的微信 OAuth iframe 元素」（新版码在 open.weixin.qq.com/connect/qrconnect 的 iframe 里、src 是 URL 不是 data:image）、`_is_tencent_login_completed` 放宽到「落 `/platform/*` 且无登录 iframe 即成功」（微信登录后落 `/platform/home` 不是 `post/create`）。**最快修法：打本仓库带的补丁** `cd ~/Desktop/workplace/social-auto-upload && git apply <baokuan-factory clone>/docs/patches/social-auto-upload-login-fixes.patch`（打不上就照上面几条手改）。CLI 内置扫码窗口只等约 2 分钟太短，急的话直接调 `xxx_cookie_gen(account_file, headless=False, poll_interval=3, max_checks=200)` 给 10 分钟。
+- **发布：视频号图文发不了**：`sau tencent` 只有 `upload-video`，图文（`TencentNote`）是骨架会 `NotImplementedError`，**别答应用户用 sau 发视频号图文**；抖音/小红书图文正常（`upload-note`）。

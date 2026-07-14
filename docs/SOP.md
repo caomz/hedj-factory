@@ -34,6 +34,8 @@
 ║         字幕+卡片素材+章节条+主题，HTML 合成→render→成片 mp4         ║
 ║  Step5 四平台文案  ◄─────┘ 注入②「表达 DNA」口吻 = 说话方式         ║
 ║         抖音/视频号/小红书(中) + X(英)，各 2-3 备选                   ║
+║  Step6 一键发号   ◄─────  social-auto-upload(sau) → 抖音/小红书/视频号║
+║         先 check 登录 → 传成片+文案；发前必跟用户确认（对外不可逆） ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -45,6 +47,7 @@
 4. **写翻拍稿**（Step 3，video-distill Phase 3.5）→ **`口播/<片名>/翻拍稿.md`**。个人元素审计 → 洗稿，把原作者换成你自己，开头黄金 5 秒 hook。**这步最常被漏掉，漏了就没东西可录、没法成片**——「角度」不是能念的稿。
 5. **成片**（Step 4）→ 口播号(真人出镜)走 **talking-head-edit**：照 `翻拍稿.md` 录好竖屏口播交给它，配双语字幕 + 卡片素材(用 `/browse` 抓权威截图存 `build/news/`) + 章节条 + 主题，渲染前先出 `review.html` 给用户审。卡片/组件/主题的规格全在 `talking-head-edit/engine/DESIGN.md`(单一真源)。图文/混剪走 **hyperframes** 手写 HTML。
 6. **四平台文案**（Step 5）→ **第二次读你的 profile**：用「表达 DNA」口吻写四平台标题+正文+hashtag。注入的是**口吻**。
+7. **一键发号**（Step 6，可选）→ 用 **social-auto-upload（`sau` CLI）** 把 `<片名>-成片.mp4` + `平台文案.md` 发到抖音/小红书/视频号。真浏览器自动化（不是 API），**先 `sau <平台> check` 查登录**，`invalid` 就 `login --headed` 扫码。**发布是对外不可逆动作，发哪个号/哪些平台/立即还是定时，必须逐条跟用户确认再发**。视频号只发视频（图文没实现）。
 
 ## 两个注入点为什么分开
 
@@ -83,3 +86,7 @@
 - **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。whisper 模型复用机器已有的。
 - **gstack `/browse` 怎么装**：`brew` 装不了，但它是**公开仓库**（github.com/garrytan/gstack），**不用找团队要**，自己一行装（需 Bun v1.0+ 和 Git）：`git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`。装完重开一轮生效，升级用 `/gstack-upgrade`。临时不装也能跑：视频号改备选下载、截图手动塞进 `build/news/`。
 - **profile 注入不准**：Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错。重蒸或改标记文件。
+- **发布：social-auto-upload 装法**（Step 6 用，公开仓库 github.com/dreammis/social-auto-upload，MIT）：`cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright" .venv/bin/patchright install chromium && cp conf.example.py conf.py`。之后 `source .venv/bin/activate && sau --help`。
+- **发布：登录/cookie**：cookie 是平台会话，几天到两周过期，**每次发前先 `sau <平台> check --account <h>`**，`invalid` 就 `sau <平台> login --account <h> --headed` 扫码（抖音扫抖音 App、小红书扫小红书 App、视频号扫微信）。
+- **发布：首次登录报错**是 upstream 已知 bug（fresh clone 会踩）。**最快：打本仓库带的补丁**——`cd ~/Desktop/workplace/social-auto-upload && git apply <baokuan-factory clone>/docs/patches/social-auto-upload-login-fixes.patch`。补丁内容：抖音 `_wait_for_douyin_login` 的 `original_url`/`saw_2fa`/`i` 未定义要补；三平台登录 `page.goto` 加 `timeout=90000, wait_until="domcontentloaded"`；视频号 `_build_launch_kwargs` 把 `channel="chrome"` 改 `"chromium"`、二维码改截微信 OAuth iframe 元素、`_is_tencent_login_completed` 放宽到落 `/platform/*` 即成功。补丁若因上游版本变化打不上，就照这几条手动改。
+- **发布：视频号图文发不了**：`sau tencent` 只有 `upload-video`（图文是骨架 `NotImplementedError`）；抖音/小红书图文用 `upload-note`。

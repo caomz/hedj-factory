@@ -51,6 +51,15 @@ else
   printf "      git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup\n"
   warn "（装完重开一轮 Claude Code 生效；临时不装也能跑：视频号改备选下载、截图手动塞进 build/news/）"
 fi
+# 软依赖（最后一环 · 发布）：social-auto-upload（sau CLI）。公开仓库，单独装，只有 Step 6 一键发号才用；不装不影响成片+文案。
+SAU_DIR="$HOME/Desktop/workplace/social-auto-upload"
+if [ -x "$SAU_DIR/.venv/bin/sau" ]; then
+  ok "social-auto-upload（sau）— 已装（Step 6 一键发抖音/小红书/视频号可用；发前记得先 sau <平台> check）"
+else
+  warn "social-auto-upload 没装：不影响前面，只有走到 Step 6 一键发号才需要。公开仓库（github.com/dreammis/social-auto-upload，MIT，需 uv + python3.10~3.12），一段装："
+  printf "      cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST=\"https://npmmirror.com/mirrors/playwright\" .venv/bin/patchright install chromium && cp conf.example.py conf.py\n"
+  warn "（装完各平台 sau <平台> login --account <你> --headed 扫码；首次登录若报错见 docs/SOP.md 排错「发布」）"
+fi
 echo
 
 # --- 2. install skills -------------------------------------------------------
@@ -96,6 +105,7 @@ cat <<'EOF'
   在 Claude Code 里说一句任意触发：
     · 第一次用 → "用爆款工厂帮我 onboarding"（会先装/查依赖 + 用女娲蒸馏你自己）
     · 翻拍一条 → "我要翻拍这条视频 <对标链接>，做成我自己口吻的成片和文案"
+    · 发出去   → "把这条成片发到抖音/小红书/视频号"（Step 6，会先 check 登录、发前跟你确认）
 
   全流程图：docs/SOP.md
 EOF
