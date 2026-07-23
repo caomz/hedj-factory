@@ -102,7 +102,7 @@ git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-u
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=FromTX2SJ/hedj-factory&type=Date)](https://www.star-history.com/#FromTX2SJ/hedj-factory&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=FromTX2SJ/hedj-factory&type=Date&v=2)](https://www.star-history.com/#FromTX2SJ/hedj-factory&Date)
 
 ## 🐾 Find me(全网同名)
 
