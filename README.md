@@ -107,8 +107,8 @@ git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-u
 ## 🐾 Find me(全网同名)
 
 [![X](https://img.shields.io/badge/X-%400xKaiwen-000000?logo=x&logoColor=white)](https://x.com/0xKaiwen)
-[![小红书](https://img.shields.io/badge/%E5%B0%8F%E7%BA%A2%E4%B9%A6-0xKaiwen-FF2442?logo=xiaohongshu&logoColor=white)](https://www.xiaohongshu.com)
-[![抖音](https://img.shields.io/badge/%E6%8A%96%E9%9F%B3-0xKaiwen-000000?logo=tiktok&logoColor=white)](https://www.douyin.com)
+[![小红书](https://img.shields.io/badge/%E5%B0%8F%E7%BA%A2%E4%B9%A6-0xKaiwen-FF2442?logo=xiaohongshu&logoColor=white)](https://www.xiaohongshu.com/user/profile/652d3908000000002a01908e)
+[![抖音](https://img.shields.io/badge/%E6%8A%96%E9%9F%B3-0xKaiwen-000000?logo=tiktok&logoColor=white)](https://www.douyin.com/search/1926695496)
 [![视频号](https://img.shields.io/badge/%E5%BE%AE%E4%BF%A1%E8%A7%86%E9%A2%91%E5%8F%B7-0xKaiwen-07C160?logo=wechat&logoColor=white)](#)
 
 ## 📄 License
