@@ -122,7 +122,7 @@
         "Typecheck passes (Python AST parsing succeeds and all policy fixture JSON files pass python3 -m json.tool)"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false

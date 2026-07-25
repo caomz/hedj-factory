@@ -6,6 +6,9 @@
 - 自我蒸馏工作流文档统一引用单一规范；任何 story 在进入 self 流程前必须先读 references/self-distill-workflow.md，不得从 SKILL.md 重新猜测 class/checkpoint
 - self 模式默认纯本地：除非用户明确要求，不联网佐证；外部材料只允许在 references/research/ 对照，不进入 assets/
 - 在 `/Volumes/WorkSSD/Cache/tmp`（APFS firmlink）上用 `subprocess.run` 调子进程创建的文件，父进程在同一 `tempfile.mkdtemp` 内 `Path.is_file()` 经常读不到（firmlink 写完后元数据同步延迟）；测试优先 import 被测模块后直接调函数，避免 `subprocess.run`，并在 finally 内做完所有断言再 `shutil.rmtree`
+- source-policy.json 字段名 `schema_version` / `rules[].class` / `rules[].globs` 与合法 class 枚举（authored/private-evidence/adapted/external/excluded）由 US-006 锁定；后续 quality_check / merge_research / US-013 文档引用时必须复用同一名称与顺序，class 集合不得新增
+- inventory 的 record 字段顺序是 manifest 的事实契约：US-006 仅在 `_build_manifest` 内引入 `can_distill` / `unmatched_count` 计算，不修改 record 字段集合；US-007+ 增加 sha256/duplicate_group/version_group/semantic_read 时同样保持 record 键名稳定
+- `_glob_matches` 实现 `**/`（零或多层目录）与 `**`（任意字符）语义；`fnmatch.fnmatch` 与 `pathlib.PurePath.match` 都不直接支持 `**/`，不要在 story 中临时替换
 
 ---
 
@@ -75,3 +78,22 @@
   - manifest 是后续 source-policy 与 US-018 性能基线的输入契约：unmatched_count 与 files[].policy_class 字段名必须保持稳定；US-006 应用 first-match 后只能改 policy_class 字段值，不能新增或删除字段
   - 旧 manifest 存在时拒绝写入（mkdir(parents=True, exist_ok=False) + 文件存在检查）是幂等保护：US-007+ 的重跑应保留这条契约，由用户显式清理 profile 或换新 profile 目录
   - inventory review 的 00-source-inventory.md 是 Nuwa 写 source-policy 草稿的输入，因此 family 计数与 unmatched 摘要必须可被 rg/awk 解析；保持 markdown 列表格式 `- \`name\`: count` 不变
+
+## 2026-07-25 11:20 - US-006
+- 在 inventory_local_corpus.py 加入 POLICY_SCHEMA_VERSION/VALID_POLICY_CLASSES/DISTILLABLE_POLICY_CLASSES/SourcePolicyError；新增 load_source_policy（顶层对象、schema_version=1、rules 非空、class 合法、globs 非空字符串）和 apply_source_policy（first-match wins、生成新 records）；自定义 _glob_matches 支持 `**/` 与 `**` 跨目录
+- CLI 在 --policy 时加载 policy，失败以退出码 2 + stderr 结束；policy 合法则 apply_source_policy 改写 records 的 policy_class，再走现有写盘路径
+- write_manifest_and_review 接受 policy=None/loaded 两种调用；_build_manifest 在所有 eligible+非 excluded 文件进入 DISTILLABLE_POLICY_CLASSES 时设置 can_distill=true；excluded 不计入阅读预算
+- inventory review 增加 `policy_class 计数` 段与「未匹配文件」相对路径清单；can_distill=true 时状态附文改为可进入六维研究
+- 新增 SourcePolicyTests 7 例：first-match wins + unmatched 不阻塞、full policy → can_distill=true、invalid JSON/class/空 globs 拒绝、CLI 拒绝时不写盘且旧 manifest 不被覆盖、review 列出 class 计数与未匹配相对路径
+- 修正 test_cli_accepts_policy_and_custom_max_file_bytes：原测试给一个空路径通过 --policy，US-006 引入真实加载逻辑后必须随附合法 policy fixture
+- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（20 OK）；SourcePolicyTests 7 例独立运行 OK；CLI 端到端生成可被 json.tool 解析的 manifest，can_distill=true；CLI 非法 JSON 退出码 2 且不创建 profile 目录；git diff --check 通过；AST 解析通过
+- 提交：d113a15 feat: US-006 - 实现 source policy 校验和有序匹配
+- 同步更新：scripts/ralph/prd.json 中 US-006 passes=true
+- **未来迭代的学习：**
+  - `first-match wins` + `excluded 不阻塞` 是 US-006 的核心契约：后续 US-007+ 在 manifest 中加 sha256/duplicate_group/version_group/semantic_read 字段时，复用同一份 records，不得绕过 apply_source_policy 直接写 policy_class
+  - `load_source_policy` 在 CLI 入口处执行，校验失败时跳过整段写盘逻辑（包括 mkdir profile_dir），所以“CLI 拒绝时不创建 profile 目录”是隐性契约；US-009/quality_check.py 写新入口时不要把 profile 目录创建提前到 policy 校验之前
+  - `DISTILLABLE_POLICY_CLASSES` 是 manifest 顶部 can_distill 的输入；US-013 文档/US-018 真实语料测试都应复用同一集合；如需加入第六类，必须先在 self-distill-workflow.md §2 同步更新枚举表
+  - `_glob_matches` 用 regex 而非 fnmatch/PurePath.match，是为支持 `**/`；任何后续 policy 编辑工具或 GUI 必须复用同一定义，否则会出现「policy 写 `.md` 但 inventory 不命中」的 silent mismatch
+  - inventory review 末尾 `## 未匹配文件` 的相对路径是 Nuwa 提 Checkpoint A policy 草稿的输入；当前实现每条都以 `- \`path\`` 列出，US-009 merge_research / quality_check 不要重新解析，只 rg `\`- 即可
+  - US-006 的 test_cli_accepts_policy_and_custom_max_file_bytes 改成「提供合法 policy」后，未来如果再次收紧 policy 校验（如要求 rules 至少覆盖 N 个 family），同样要同步更新这个 smoke test，不能只补新测试
