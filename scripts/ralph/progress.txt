@@ -5,6 +5,7 @@
 - 公众人物 quality_check.py 当前不区分 profile_type；新增 self 模式需要在 frontmatter 检测后切换校验
 - 自我蒸馏工作流文档统一引用单一规范；任何 story 在进入 self 流程前必须先读 references/self-distill-workflow.md，不得从 SKILL.md 重新猜测 class/checkpoint
 - self 模式默认纯本地：除非用户明确要求，不联网佐证；外部材料只允许在 references/research/ 对照，不进入 assets/
+- 在 `/Volumes/WorkSSD/Cache/tmp`（APFS firmlink）上用 `subprocess.run` 调子进程创建的文件，父进程在同一 `tempfile.mkdtemp` 内 `Path.is_file()` 经常读不到（firmlink 写完后元数据同步延迟）；测试优先 import 被测模块后直接调函数，避免 `subprocess.run`，并在 finally 内做完所有断言再 `shutil.rmtree`
 
 ---
 
@@ -62,3 +63,15 @@
   - `is_binary_file` 仅做 NUL 字节 + UTF-8 解码快速判定，会把 Windows-1252/GBK 等合法文本误判为 binary；如 US-011 隐私扫描要把 GBK 文本按文本处理，需要在那里引入编码探测，不要扩展此函数
   - `summarize_inventory` 单次遍历与 record 字段集合锁定后，US-005 复用同一份 records 计算 manifest，US-018 的 `--check` 性能基线（13k 文件 ≤120s）由本实现满足；后续不要在 walk 中再做额外 lstat
   - US-004 显式不引入 symlink 跟随、firmlink 边界检测、APFS 大小写归一化、Unicode NFC/NFD 等；这些超出 v1 范围，由 US-005 后续讨论决定是否扩展，避免 story 越界
+
+## 2026-07-25 19:07 - US-005
+- inventory_local_corpus.py 接入无 policy 场景的 manifest + review 写入：新增 write_manifest_and_review()、_build_manifest()、_write_json()、_write_inventory_review()；manifest schema_version=1、can_distill=false、unmatched_count、files[] 字段顺序固定，绝对 source_root 仅写入 manifest，review 只输出统计与 family 计数
+- CLI 在 `not args.check and args.policy is None and args.profile_dir is not None` 时调用写入；旧 manifest / 00-source-inventory.md 存在则拒绝并以非零退出码结束，不覆盖；从不写 source-policy.json
+- 新增 LocalCorpusOutputTests 两例：test_no_policy_writes_manifest_and_review 断言 manifest 字段、family 计数、SHA 前后一致、review 不含源正文、不写 source-policy；test_no_policy_with_existing_profile_is_rejected_without_overwrite 断言旧 manifest 内容不变
+- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（13 OK）；AST 解析；git diff --check 通过；CLI 端到端生成可被 json.tool 解析的 manifest
+- **未来迭代的学习：**
+  - macOS 上 /Volumes/WorkSSD/Cache/tmp 是 APFS firmlink，subprocess.run 调子进程创建的文件对父进程的 Path.is_file() 不可见；后续测试涉及写盘断言时优先 import 模块后直接调用函数，并把所有断言放在 finally 内的 rmtree 之前
+  - manifest 是后续 source-policy 与 US-018 性能基线的输入契约：unmatched_count 与 files[].policy_class 字段名必须保持稳定；US-006 应用 first-match 后只能改 policy_class 字段值，不能新增或删除字段
+  - 旧 manifest 存在时拒绝写入（mkdir(parents=True, exist_ok=False) + 文件存在检查）是幂等保护：US-007+ 的重跑应保留这条契约，由用户显式清理 profile 或换新 profile 目录
+  - inventory review 的 00-source-inventory.md 是 Nuwa 写 source-policy 草稿的输入，因此 family 计数与 unmatched 摘要必须可被 rg/awk 解析；保持 markdown 列表格式 `- \`name\`: count` 不变

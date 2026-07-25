@@ -1,5 +1,8 @@
 """Nuwa 本地知识目录 inventory 的标准库测试。"""
 
+import hashlib
+import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -10,7 +13,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "inventory_local_corpus.py"
 sys.path.insert(0, str(SCRIPT.parent))
-from inventory_local_corpus import inventory_local_corpus, summarize_inventory
+from inventory_local_corpus import (
+    inventory_local_corpus,
+    summarize_inventory,
+    write_manifest_and_review,
+)
 
 
 class LocalCorpusInputValidationTests(unittest.TestCase):
@@ -225,6 +232,133 @@ class LocalCorpusTraversalTests(unittest.TestCase):
         self.assertFalse(records[0]["eligible"])
         self.assertEqual(records[0]["exclusion_reason"], "oversized")
 
+
+class LocalCorpusOutputTests(unittest.TestCase):
+    """覆盖 US-005 的 manifest / review 写入。"""
+
+    @staticmethod
+    def _hash_tree(root: Path) -> dict:
+        payload: dict = {}
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                payload[path.relative_to(root).as_posix()] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest()
+                )
+        return payload
+
+    def test_no_policy_writes_manifest_and_review(self):
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_us005_"))
+        try:
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            (source_root / "notes").mkdir()
+            (source_root / "notes" / "first.md").write_text(
+                "first synthetic note", encoding="utf-8"
+            )
+            (source_root / "notes" / "second.txt").write_text(
+                "second synthetic note", encoding="utf-8"
+            )
+            (source_root / "photo.png").write_bytes(b"\x89PNG\x00synthetic")
+            (source_root / "root.md").write_text("root", encoding="utf-8")
+
+            profile_dir = work_dir / "profile"
+            before_hash = self._hash_tree(source_root)
+
+            records = inventory_local_corpus(source_root)
+            summary = summarize_inventory(records)
+            write_manifest_and_review(
+                profile_dir, records, source_root, summary, 2_000_000
+            )
+
+            after_hash = self._hash_tree(source_root)
+
+            manifest_path = profile_dir / "references" / "source-manifest.json"
+            review_path = (
+                profile_dir / "references" / "research" / "00-source-inventory.md"
+            )
+            self.assertTrue(manifest_path.is_file())
+            self.assertTrue(review_path.is_file())
+
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], 1)
+            self.assertFalse(manifest["can_distill"])
+            self.assertEqual(manifest["max_file_bytes"], 2_000_000)
+            self.assertEqual(manifest["source_root"], str(source_root.resolve()))
+            self.assertTrue(manifest["generated_at"].endswith("Z"))
+            self.assertGreaterEqual(manifest["unmatched_count"], 1)
+            self.assertEqual(manifest["summary"]["total_files"], 4)
+            self.assertEqual(manifest["summary"]["eligible_files"], 3)
+            self.assertEqual(manifest["summary"]["skipped_by_extension"], 1)
+
+            entries = manifest["files"]
+            self.assertEqual(len(entries), 4)
+            self.assertTrue(
+                all(entry["policy_class"] == "unclassified" for entry in entries)
+            )
+            eligible_entries = [
+                entry
+                for entry in entries
+                if entry["eligible"] and entry["policy_class"] == "unclassified"
+            ]
+            self.assertEqual(
+                len(eligible_entries), manifest["unmatched_count"]
+            )
+            for entry in entries:
+                self.assertEqual(
+                    set(entry),
+                    {
+                        "relative_path",
+                        "extension",
+                        "size_bytes",
+                        "mtime",
+                        "top_level_family",
+                        "eligible",
+                        "policy_class",
+                        "exclusion_reason",
+                    },
+                )
+
+            review_text = review_path.read_text(encoding="utf-8")
+            self.assertIn("# Source Inventory Review", review_text)
+            self.assertIn("can_distill: False", review_text)
+            self.assertIn("`notes`", review_text)
+            for needle in (
+                "first synthetic note",
+                "second synthetic note",
+                "synthetic text",
+            ):
+                self.assertNotIn(needle, review_text)
+            self.assertFalse((profile_dir / "source-policy.json").exists())
+            self.assertEqual(before_hash, after_hash)
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_no_policy_with_existing_profile_is_rejected_without_overwrite(self):
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_us005_"))
+        try:
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            (source_root / "a.md").write_text("a", encoding="utf-8")
+
+            profile_dir = work_dir / "profile"
+            existing_manifest = profile_dir / "references" / "source-manifest.json"
+            existing_manifest.parent.mkdir(parents=True)
+            existing_manifest.write_text('{"legacy": true}', encoding="utf-8")
+            legacy_content = existing_manifest.read_text(encoding="utf-8")
+
+            records = inventory_local_corpus(source_root)
+            summary = summarize_inventory(records)
+            with self.assertRaises(Exception) as raised:
+                write_manifest_and_review(
+                    profile_dir, records, source_root, summary, 2_000_000
+                )
+
+            preserved_content = existing_manifest.read_text(encoding="utf-8")
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+        self.assertIn("已存在 inventory 产物", str(raised.exception))
+        self.assertEqual(preserved_content, legacy_content)
 
 if __name__ == "__main__":
     unittest.main()

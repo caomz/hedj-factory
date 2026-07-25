@@ -10,11 +10,18 @@ story 实现。
 """
 
 import argparse
+import datetime as _datetime
+import json
 import os
 import stat
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
+
+MANIFEST_SCHEMA_VERSION = 1
+MANIFEST_FILE_NAME = "source-manifest.json"
+INVENTORY_REVIEW_FILE = "00-source-inventory.md"
+INVENTORY_REVIEW_DIR = "research"
 
 
 DEFAULT_MAX_FILE_BYTES = 2_000_000
@@ -260,14 +267,168 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         print(f"错误: {exc}", file=sys.stderr)
         return 2
 
-    mode = "check" if args.check else "inventory"
     summary = summarize_inventory(records)
+    mode = "check" if args.check else "inventory"
     fields = " ".join(f"{key}={value}" for key, value in summary.items())
     print(
         f"mode={mode} source_root={source_root} "
         f"max_file_bytes={args.max_file_bytes} {fields}"
     )
+
+    if not args.check and args.policy is None and args.profile_dir is not None:
+        try:
+            write_manifest_and_review(
+                profile_dir=args.profile_dir.expanduser().resolve(strict=False),
+                records=records,
+                source_root=source_root,
+                summary=summary,
+                max_file_bytes=args.max_file_bytes,
+            )
+        except (InputValidationError, InventoryError, OSError) as exc:
+            print(f"错误: {exc}", file=sys.stderr)
+            return 2
+
     return 0
+
+
+def write_manifest_and_review(
+    profile_dir: Path,
+    records: Sequence[Dict[str, object]],
+    source_root: Path,
+    summary: Dict[str, int],
+    max_file_bytes: int,
+) -> None:
+    """在无 policy 场景下把 manifest 与 inventory review 写入 profile。
+
+    行为契约：
+    - 所有 eligible 文件保持 ``policy_class="unclassified"``，并在 manifest
+      顶层用 ``can_distill=False`` 阻塞后续语义阶段。
+    - 只写入 ``references/source-manifest.json`` 与
+      ``references/research/00-source-inventory.md``；绝不写入
+      ``source-policy.json`` 或其他 profile 产物。
+    - 绝不读取源文件正文；review 中只输出统计与 family 摘要。
+    """
+    if profile_dir.resolve(strict=False) == source_root:
+        raise InputValidationError(
+            "profile-dir 不得等于 source_root"
+        )
+    if is_within(profile_dir.resolve(strict=False), source_root):
+        raise InputValidationError(
+            "profile-dir 不得位于 source_root 内部"
+        )
+
+    references_dir = profile_dir / "references"
+    research_dir = references_dir / INVENTORY_REVIEW_DIR
+    research_dir.mkdir(parents=True, exist_ok=False)
+
+    manifest_path = references_dir / MANIFEST_FILE_NAME
+    review_path = research_dir / INVENTORY_REVIEW_FILE
+    if manifest_path.exists() or review_path.exists():
+        raise InventoryError(
+            f"profile 目录已存在 inventory 产物: {profile_dir}"
+        )
+
+    manifest = _build_manifest(records, source_root, summary, max_file_bytes)
+    _write_json(manifest_path, manifest)
+    _write_inventory_review(review_path, manifest, summary)
+
+
+def _build_manifest(
+    records: Sequence[Dict[str, object]],
+    source_root: Path,
+    summary: Dict[str, int],
+    max_file_bytes: int,
+) -> Dict[str, object]:
+    """构造无 policy 场景的 source manifest，保留稳定字段顺序。"""
+    file_entries: List[Dict[str, object]] = []
+    for record in records:
+        file_entries.append(
+            {
+                "relative_path": record["relative_path"],
+                "extension": record["extension"],
+                "size_bytes": record["size_bytes"],
+                "mtime": record["mtime"],
+                "top_level_family": record["top_level_family"],
+                "eligible": record["eligible"],
+                "policy_class": "unclassified",
+                "exclusion_reason": record.get("exclusion_reason"),
+            }
+        )
+
+    unmatched_count = sum(
+        1
+        for entry in file_entries
+        if entry["eligible"] and entry["policy_class"] == "unclassified"
+    )
+    return {
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "generated_at": _datetime.datetime.now(tz=_datetime.timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        "source_root": str(source_root),
+        "max_file_bytes": max_file_bytes,
+        "can_distill": False,
+        "unmatched_count": unmatched_count,
+        "summary": dict(summary),
+        "files": file_entries,
+    }
+
+
+def _write_json(path: Path, payload: Dict[str, object]) -> None:
+    """原子写入 JSON manifest，避免半截文件污染后续读入。"""
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False),
+        encoding="utf-8",
+    )
+    os.replace(tmp_path, path)
+
+
+def _write_inventory_review(
+    path: Path,
+    manifest: Dict[str, object],
+    summary: Dict[str, int],
+) -> None:
+    """生成不含源文件正文、只含统计与 family 摘要的 inventory review。"""
+    family_counts: Dict[str, int] = {}
+    for entry in manifest["files"]:  # type: ignore[index]
+        family = entry["top_level_family"]  # type: ignore[index]
+        family_counts[family] = family_counts.get(family, 0) + 1
+
+    family_lines = "\n".join(
+        f"- `{name}`: {count}" for name, count in sorted(family_counts.items())
+    ) or "- (none)"
+
+    lines = [
+        "# Source Inventory Review",
+        "",
+        "> 由 `inventory_local_corpus.py` 自动生成；所有文件 policy_class",
+        "> 均为 `unclassified`，Nuwa 必须在用户确认 policy 后才能进入语义阶段。",
+        "",
+        "## 摘要",
+        "",
+        f"- source_root: `{manifest['source_root']}`",
+        f"- generated_at: {manifest['generated_at']}",
+        f"- can_distill: {manifest['can_distill']}",
+        f"- unmatched_count: {manifest['unmatched_count']}",
+        f"- total_files: {summary['total_files']}",
+        f"- eligible_files: {summary['eligible_files']}",
+        f"- ineligible_files: {summary['ineligible_files']}",
+        f"- skipped_by_extension: {summary['skipped_by_extension']}",
+        f"- oversized_files: {summary['oversized_files']}",
+        f"- binary_files: {summary['binary_files']}",
+        "",
+        "## top_level_family 计数",
+        "",
+        family_lines,
+        "",
+        "## 未匹配文件",
+        "",
+        f"- 共 {manifest['unmatched_count']} 个 eligible 文件保持 `unclassified`；",
+        "  Nuwa 必须在 Checkpoint A 提出 `source-policy.json` 草稿并经用户逐条确认。",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> None:

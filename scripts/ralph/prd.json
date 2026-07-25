@@ -101,7 +101,7 @@
         "Typecheck passes (Python AST parsing succeeds and python3 -m json.tool can parse the generated fixture manifest)"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
