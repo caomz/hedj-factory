@@ -1595,5 +1595,405 @@ class PrivacyGateTests(unittest.TestCase):
         self.assertRegex(combined, _re.compile(r"SKILL\.md:\d+"))
 
 
+class SelfDistillEndToEndTests(unittest.TestCase):
+    """覆盖 US-017：合成语料端到端 — 盘点 → policy → 质量门 → 隐私失败。
+
+    整套测试以 `tests/fixtures/nuwa-self-distill/e2e/` 为基础，运行两次 inventory
+    （无 policy → 带 policy），断言：源树零写入、profile 目录无源正文副本、
+    first-match 分类、duplicate representative、version current、clean self
+    profile 通过 quality gate、dirty self profile 失败且不回显凭据值，
+    全部 person fixture 仍能通过。
+    """
+
+    REPO_ROOT = Path(__file__).resolve().parents[1]
+    SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "inventory_local_corpus.py"
+    QUALITY_SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "quality_check.py"
+    MERGE_SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "merge_research.py"
+    FIXTURES = REPO_ROOT / "tests" / "fixtures" / "nuwa-self-distill"
+    E2E_CORPUS = FIXTURES / "e2e" / "corpus"
+    E2E_POLICY = FIXTURES / "e2e" / "source-policy.json"
+    MERGE_FIXTURES = FIXTURES / "merge_research"
+
+    def _run_inventory(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def _run_quality(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.QUALITY_SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def _hash_tree(self, root: Path) -> dict:
+        payload: dict = {}
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                payload[path.relative_to(root).as_posix()] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest()
+                )
+        return payload
+
+    def _build_clean_self_profile(self, root: Path, *, with_dirty_assets: bool = False,
+                                   add_dirty_skill_line: str | None = None) -> Path:
+        """合成一个 self profile 目录，含 7 个必需章节和 assets/index.md。
+
+        `with_dirty_assets` 时附加明显的假隐私污染样例以触发质量门失败。
+        `add_dirty_skill_line` 在 SKILL.md 内追加一行污染内容（如 wxid_ / @chatroom
+        / token=... / 私网 IP）以触发质量门失败。
+        """
+        profile = root / "synthetic-self-profile"
+        profile.mkdir()
+        (profile / "assets").mkdir()
+        (profile / "assets" / "index.md").write_text(
+            "# index\n\nSynthetic profile index for self-distill e2e.\n",
+            encoding="utf-8",
+        )
+        # 8 个 assets 页面：index 之上 7 张资产卡，token 控制在 3000-6000 区间。
+        page_stubs = (
+            "positioning",
+            "core-theses",
+            "operating-principles",
+            "systems-and-workflows",
+            "cases-and-evidence",
+            "content-motifs",
+            "reusable-products",
+        )
+        for page in page_stubs:
+            (profile / "assets" / f"{page}.md").write_text(
+                f"# {page}\n\nSynthetic asset page for e2e fixture.\n",
+                encoding="utf-8",
+            )
+
+        sections = (
+            "定位与受众",
+            "核心心智模型",
+            "决策启发式",
+            "表达DNA",
+            "内容品味与评分标准",
+            "价值观与反模式",
+            "诚实边界",
+        )
+        body_lines = ["---", "profile_type: self", "---", "", "# Synthetic Self Profile", ""]
+        for section in sections:
+            body_lines.append(f"## {section}")
+            body_lines.append("")
+            body_lines.append(f"参见 [链接文本](../assets/{page_stubs[0]}.md)")
+            body_lines.append("")
+        # 中文段落撑到 ~3500 estimated tokens（US-010 估算公式）
+        body_lines.append("中" * 3500)
+        if add_dirty_skill_line:
+            body_lines.append(add_dirty_skill_line)
+        (profile / "SKILL.md").write_text("\n".join(body_lines), encoding="utf-8")
+
+        if with_dirty_assets:
+            dirty_assets = {
+                "wechat-id.md": "synthetic wxid_fake_dirty_alpha1234 secret\n",
+                "chatroom-id.md": "synthetic secret @chatroom_fake12345\n",
+                "credential.md": "token=fake_dirty_token_value api access\n",
+                "internal-ip.md": "internal only 10.0.0.66 reachable\n",
+            }
+            for name, body in dirty_assets.items():
+                (profile / "assets" / name).write_text(
+                    f"# {name}\n\n{body}", encoding="utf-8"
+                )
+        return profile
+
+    # ---- 静态 fixture 自检（保证目录可复用） ----
+
+    def test_e2e_fixture_layout_is_complete(self):
+        """静态 fixture 必须包含 US-017 要求的五类元素。"""
+        expected = (
+            self.E2E_CORPUS / "authored" / "note-alpha.md",
+            self.E2E_CORPUS / "authored" / "note-alpha-copy.md",
+            self.E2E_CORPUS / "authored" / "plan-v0.1.md",
+            self.E2E_CORPUS / "authored" / "plan-v0.2.md",
+            self.E2E_CORPUS / "authored" / "plan-v1.md",
+            self.E2E_CORPUS / "private" / "summary-q1.md",
+            self.E2E_CORPUS / "private" / "summary-q2.md",
+            self.E2E_CORPUS / "adapted" / "derived-1.md",
+            self.E2E_CORPUS / "adapted" / "derived-2.md",
+            self.E2E_CORPUS / "external" / "article-1.md",
+            self.E2E_CORPUS / "external" / "article-2.md",
+            self.E2E_CORPUS / "authored" / "legacy.md",
+            self.E2E_POLICY,
+        )
+        for path in expected:
+            self.assertTrue(path.is_file(), f"fixture missing: {path}")
+
+        # 精确重复：note-alpha 与 note-alpha-copy 必须有相同 SHA-256
+        alpha_hash = hashlib.sha256(
+            (self.E2E_CORPUS / "authored" / "note-alpha.md").read_bytes()
+        ).hexdigest()
+        copy_hash = hashlib.sha256(
+            (self.E2E_CORPUS / "authored" / "note-alpha-copy.md").read_bytes()
+        ).hexdigest()
+        self.assertEqual(alpha_hash, copy_hash)
+
+        # 版本序列：plan-v1 必须存在，被期望为 current
+        self.assertTrue((self.E2E_CORPUS / "authored" / "plan-v1.md").is_file())
+
+        # policy 必须合法 JSON，且 schema_version=1 + rules 非空
+        policy = json.loads(self.E2E_POLICY.read_text(encoding="utf-8"))
+        self.assertEqual(policy["schema_version"], 1)
+        self.assertGreaterEqual(len(policy["rules"]), 4)
+
+    # ---- inventory 无 policy 阶段 ----
+
+    def test_no_policy_run_writes_unclassified_manifest_with_can_distill_false(self):
+        """无 policy 时所有 eligible 文件保持 unclassified，can_distill=false。"""
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_e2e_nopolicy_"))
+        try:
+            source_root = work_dir / "corpus"
+            profile_dir = work_dir / "profile"
+            self._copy_fixture_corpus(source_root)
+            before_hash = self._hash_tree(source_root)
+
+            result = self._run_inventory(str(source_root), "--profile-dir", str(profile_dir))
+
+            after_hash = self._hash_tree(source_root)
+            manifest_path = profile_dir / "references" / "source-manifest.json"
+            review_path = (
+                profile_dir / "references" / "research" / "00-source-inventory.md"
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(manifest_path.is_file())
+            self.assertTrue(review_path.is_file())
+            self.assertFalse((profile_dir / "source-policy.json").exists())
+            # 源目录字节级零写入
+            self.assertEqual(before_hash, after_hash)
+            # profile 目录内不得有源文件正文副本
+            self._assert_profile_has_no_source_bodies(profile_dir, source_root)
+
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertFalse(manifest["can_distill"])
+            eligible_entries = [
+                entry for entry in manifest["files"] if entry["eligible"]
+            ]
+            self.assertGreater(len(eligible_entries), 0)
+            self.assertTrue(
+                all(entry["policy_class"] == "unclassified" for entry in eligible_entries)
+            )
+
+            # review 不含源正文（关键字探针）
+            review_text = review_path.read_text(encoding="utf-8")
+            for needle in (
+                "synthetic wxid_",
+                "@chatroom_fake",
+                "10.0.0.66",
+                "token=fake",
+            ):
+                self.assertNotIn(needle, review_text)
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    # ---- inventory 带 policy 阶段 ----
+
+    def test_with_policy_classifies_first_match_sets_can_distill_true(self):
+        """带 policy 重跑后 all eligible 都有类，can_distill=true。"""
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_e2e_policy_"))
+        try:
+            source_root = work_dir / "corpus"
+            profile_dir = work_dir / "profile"
+            policy_path = work_dir / "source-policy.json"
+            self._copy_fixture_corpus(source_root)
+            policy_path.write_text(
+                self.E2E_POLICY.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+
+            result = self._run_inventory(
+                str(source_root),
+                "--profile-dir",
+                str(profile_dir),
+                "--policy",
+                str(policy_path),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            manifest = json.loads(
+                (profile_dir / "references" / "source-manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            by_path = {entry["relative_path"]: entry for entry in manifest["files"]}
+
+            # 各类至少一条命中
+            class_expect = {
+                "authored/note-alpha.md": "authored",
+                "private/summary-q1.md": "private-evidence",
+                "adapted/derived-1.md": "adapted",
+                "external/article-1.md": "external",
+                "authored/legacy.md": "excluded",
+            }
+            for rel, expected_class in class_expect.items():
+                self.assertEqual(by_path[rel]["policy_class"], expected_class)
+
+            # eligible 文件全部进入 DISTILLABLE_POLICY_CLASSES(excluded 之外) → can_distill=true
+            self.assertTrue(manifest["can_distill"])
+            # excluded 类别存在，distillable_count 不包含 excluded
+            excluded = by_path["authored/legacy.md"]
+            self.assertEqual(excluded["policy_class"], "excluded")
+            excluded_set = {
+                entry["relative_path"]
+                for entry in manifest["files"]
+                if entry["policy_class"] == "excluded"
+            }
+            self.assertEqual(excluded_set, {"authored/legacy.md"})
+
+            # duplicate representative：字典序最小者是代表（-copy 在 -alpha 前）
+            alpha = by_path["authored/note-alpha.md"]
+            alpha_copy = by_path["authored/note-alpha-copy.md"]
+            self.assertEqual(alpha["duplicate_group"], alpha_copy["duplicate_group"])
+            self.assertTrue(alpha_copy["semantic_read"])
+            self.assertFalse(alpha["semantic_read"])
+            self.assertEqual(alpha["duplicate_group"], alpha["sha256"])
+            self.assertLess("authored/note-alpha-copy.md", "authored/note-alpha.md")
+
+            # version sequence：plan-v1 为 current
+            v1 = by_path["authored/plan-v1.md"]
+            v01 = by_path["authored/plan-v0.1.md"]
+            v02 = by_path["authored/plan-v0.2.md"]
+            self.assertEqual(v1["version_group"], v01["version_group"])
+            self.assertEqual(v01["version_group"], v02["version_group"])
+            self.assertTrue(v1["current_version"])
+            self.assertTrue(v01["evolution_only"])
+            self.assertTrue(v02["evolution_only"])
+
+            # 源目录 SHA-256 在带 policy 重跑前后仍一致（环境无残留文件）
+            final_hash = self._hash_tree(source_root)
+            # 比较本次复制后的预期哈希：每个原文按字节重算
+            expected_hash = self._hash_tree(self.E2E_CORPUS)
+            self.assertEqual(final_hash, expected_hash)
+            # profile 目录内不得有源正文副本
+            self._assert_profile_has_no_source_bodies(profile_dir, source_root)
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    # ---- quality_check 集成：clean profile / dirty profile / person 回归 ----
+
+    def test_clean_self_profile_passes_quality_gate(self):
+        """无 policy → quality 收尾：clean self profile 退出码 0。"""
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_e2e_clean_"))
+        try:
+            profile = self._build_clean_self_profile(work_dir)
+            result = self._run_quality(str(profile))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            # 关键契约
+            self.assertIn("mode=self", result.stdout)
+            self.assertIn("公开面隐私扫描", result.stdout)
+            self.assertIn("5/5 通过", result.stdout)
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_dirty_self_profile_fails_quality_gate_without_echoing_value(self):
+        """隐私污染 fixture：quality_check 必须失败，输出不回显完整敏感值。"""
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_e2e_dirty_"))
+        try:
+            profile = self._build_clean_self_profile(work_dir, with_dirty_assets=True)
+            result = self._run_quality(str(profile))
+            combined = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0)
+            # 规则 id 必须命中（至少 4 种之一）
+            self.assertTrue(
+                any(
+                    rule in combined
+                    for rule in (
+                        "WECHAT_ID",
+                        "CHATROOM_ID",
+                        "CREDENTIAL_ASSIGNMENT",
+                        "PRIVATE_IPV4",
+                    )
+                ),
+                combined,
+            )
+            # 敏感值不得完整回显
+            for sensitive in (
+                "wxid_fake_dirty_alpha1234",
+                "@chatroom_fake12345",
+                "token=fake_dirty_token_value",
+                "10.0.0.66",
+            ):
+                self.assertNotIn(sensitive, combined)
+            # 仍需给出相对路径 + 行号（findings 表友好）
+            self.assertIn("assets/", combined)
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_existing_person_merge_golden_fixture_still_passes(self):
+        """person 模式 merge_research.py golden fixture 在 US-017 后无回归。"""
+        golden_path = self.MERGE_FIXTURES / "person_golden_output.txt"
+        if not golden_path.is_file():
+            self.skipTest("person golden fixture missing")
+        golden = golden_path.read_text(encoding="utf-8")
+
+        # 无 mode
+        no_mode = subprocess.run(
+            [sys.executable, str(self.MERGE_SCRIPT), str(self.MERGE_FIXTURES / "person")],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        # 显式 --mode person
+        explicit = subprocess.run(
+            [
+                sys.executable,
+                str(self.MERGE_SCRIPT),
+                str(self.MERGE_FIXTURES / "person"),
+                "--mode",
+                "person",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(no_mode.returncode, 0, no_mode.stderr)
+        self.assertEqual(explicit.returncode, 0, explicit.stderr)
+        self.assertEqual(no_mode.stdout.rstrip("\n"), golden.rstrip("\n"))
+        self.assertEqual(explicit.stdout.rstrip("\n"), golden.rstrip("\n"))
+
+    # ---- 辅助：fixture 复制 + 完整性 ----
+
+    def _copy_fixture_corpus(self, target: Path) -> None:
+        """把 tests/fixtures/nuwa-self-distill/e2e/corpus 复制到 target/corpus。"""
+        target.mkdir(parents=True)
+        for src in self.E2E_CORPUS.rglob("*"):
+            if not src.is_file():
+                continue
+            rel = src.relative_to(self.E2E_CORPUS)
+            dst = target / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(src.read_bytes())
+
+    def _assert_profile_has_no_source_bodies(self, profile_dir: Path, source_root: Path) -> None:
+        """profile 目录内不允许出现源文件正文副本。"""
+        source_bodies = []
+        for src in source_root.rglob("*"):
+            if not src.is_file():
+                continue
+            text = src.read_text(encoding="utf-8", errors="ignore")
+            # 取第一段非标题且非指令性首行作为探针
+            for line in text.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "synthetic " not in line.lower():
+                    source_bodies.append(line)
+                    break
+        # 至少在 corpus 里找到一些非标题且非说明行作为探针
+        self.assertGreater(len(source_bodies), 0, "source corpus empty")
+
+        profile_text = ""
+        for path in profile_dir.rglob("*"):
+            if path.is_file() and path.suffix in {".md", ".txt", ".json"}:
+                profile_text += path.read_text(encoding="utf-8", errors="ignore")
+        for needle in source_bodies:
+            self.assertNotIn(needle, profile_text, f"profile leaked source body: {needle}")
+
+
 if __name__ == "__main__":
     unittest.main()
