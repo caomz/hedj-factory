@@ -37,6 +37,21 @@
 - **做一条** → 「我要翻拍这条视频 `<对标链接>`,做成我自己口吻的成片和文案」
 - **发出去** → 「把这条成片发到抖音/小红书/视频号」
 
+> **女娲自我蒸馏的两种入口**(独立于 onboarding 链路,只蒸馏你自己):
+>
+> - **少量素材**（几篇笔记 / 一两个文件）→ 走 nuwa-skill「蒸馏用户自己」小素材路径,产出精简 `SKILL.md`。
+> - **本地知识目录**(例如 `/Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw` 这种含 ≥ 数十个文件的文件夹)→ 走 nuwa-skill `self-local-corpus` 分支,产出**精简运行时 profile**(`SKILL.md`,3,000–6,000 tokens)+ **按需加载的 `assets/`**(八张资产卡 + `assets/index.md`)。`references/` 是私有面,不进下游,手工审计用。
+> - 完整 onboarding 或后续爆款工厂链路 → 由 `baokuan-factory` 编排并委托 Nuwa。
+
+### 本地目录自我蒸馏的硬边界(必读,避免误用)
+
+- **源目录(`source_root`)只读**:Nuwa 在 `self-local-corpus` 分支下**不复制、不修改、不移动**源目录里的任何文件,也不在 profile 目录里写源文件副本。
+- **不是每个文件都会被语义读取**:同名精确重复按 SHA-256 只读一份;`v0.1`/`v0.2` 这类版本序列只读 current;`excluded` 整类不读;`external` 首轮默认不读。`assets/` 是按需加载,**不会**被一次性预热成「大目录摘要」。
+- **新 profile 路径**:`skills/<handle>-profile/SKILL.md`(被仓库 `.gitignore` 的 `skills/*-profile/` 忽略);**旧路径** `skills/<handle>/SKILL.md` marker 继续接受,不自动迁移。
+- **外部归档不自动成为个人原创资产**:`external` 类的文章、播客转写、新闻报道只能作为 `references/research/` 里的背景对照,不得登记到 `assets/`。
+- **私有聊天只允许脱敏抽象**:私聊、日记原文保留为外部只读;能进 `SKILL.md` / `assets/` 的只有「脱敏后的主题归纳 / summaries / analysis」,且需通过 `scripts/quality_check.py` 的公开面隐私扫描(只扫 `SKILL.md` + `assets/*.md`,不扫 `references/`)。
+- **policy 必须显式确认**:首轮 inventory 只生成未分类 manifest;Nuwa 基于 `references/research/00-source-inventory.md` 提 `source-policy.json` 草稿,**未确认的 policy 不会**进入语义蒸馏。
+
 完整流程和「为什么这么设计」见 [`docs/SOP.md`](docs/SOP.md)。
 
 ## ☁️ 云端版:hedj.io
@@ -90,7 +105,7 @@ git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-u
 | 04 | 素材 / B-roll / 成片 | `talking-head-edit` / `hyperframes` | |
 | 05 | Headless 发布(抖音/小红书/视频号) | [social-auto-upload](https://github.com/dreammis/social-auto-upload) | 发前确认 |
 
-> 你自己的 profile(`skills/<你>/SKILL.md`)是你蒸馏出来的个人资产,**不要提交进公共仓库**。
+> 你自己的 profile(`skills/<你>-profile/SKILL.md`)是你蒸馏出来的个人资产,**不要提交进公共仓库**(被 `.gitignore` 的 `skills/*-profile/` 忽略)。
 > 视频号下载走在线解析器(`sph.litao.workers.dev`)拿明文真链,不用 mitmproxy 抓包,细节在 video-distill 里。
 
 ## 🔄 保持最新
