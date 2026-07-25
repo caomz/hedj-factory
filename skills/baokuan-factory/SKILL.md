@@ -62,22 +62,61 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
    - **发布环节(Step 6)才需要的：social-auto-upload（`sau` CLI）**。检查 `~/Desktop/workplace/social-auto-upload` 在不在、`sau --help` 通不通。**没装不影响前面**——成片+文案照跑，只有真要一键发号时才装。装法见依赖区「发布：social-auto-upload」。
 3. **蒸馏过自己吗？** 读 `~/.baokuan-factory/profile`（一行，指向用户自己的 profile SKILL.md 路径）。
    - 文件不存在或指向的文件不在 → 走 **Phase O**（一次性 onboarding）。
-   - 存在且有效 → 直接进 **Phase 1**，把该 profile 当注入源。
+   - 存在且有效（路径可读、对应 `skills/<handle>/SKILL.md` 或 `skills/<handle>-profile/SKILL.md` 都接受）→ 直接进 **Phase 1**，把该 profile 当注入源。
 
 > 为什么用 `~/.baokuan-factory/profile` 这个标记文件：每个同事翻拍时都要注入**他自己**的口吻，机器上可能蒸馏过好几个人（对标对象也会被蒸馏）。用一个显式标记记住"我是谁"，避免每次猜或问。
 
 ## Phase O · 第一次：蒸馏你自己（一次性，约 15-30 分钟）
 
-目标：产出**用户本人**的 `skills/<handle>/SKILL.md`，作为后续所有翻拍的口吻+品味注入源。
+目标：产出**用户本人**的 `skills/<handle>-profile/SKILL.md`（新约定路径，被仓库 `.gitignore` 忽略；遗留 `skills/<handle>/SKILL.md` marker 继续接受、不自动迁移），作为后续所有翻拍的口吻+品味注入源。
 
-1. 问用户两件事：**handle**（英文短名，如 `0xkaiwen`）+ **素材入口**（X/小红书/播客/公众号/LinkedIn 链接，越多越准；至少给一个主阵地）。
-2. 调用 **nuwa-skill**，让它蒸馏**用户自己**：把素材链接喂进去，按女娲的「蒸馏用户自己」路径走（女娲 SKILL.md 里有这个特殊场景）。
-3. 产物落在仓库 `skills/<handle>/`。蒸馏完，把路径写进标记文件：
-   ```bash
-   mkdir -p ~/.baokuan-factory
-   echo "<绝对路径>/skills/<handle>/SKILL.md" > ~/.baokuan-factory/profile
-   ```
-4. 跟用户确认：核心心智模型、表达DNA、从夯到拉品味是否像本人。不像就让 nuwa 再精炼一轮（女娲有「更新已有 Skill」流程）。
+### 入口三选一
+
+先问用户两件事：**handle**（英文短名，如 `0xkaiwen`）+ **素材入口**。入口允许三种形态，分别对应 Nuwa 内部不同分支：
+
+| 入口 | 例子 | 走 Nuwa 哪条分支 | baokuan 自己做什么 |
+|------|------|------------------|--------------------|
+| 社交链接 | X / 小红书 / 公众号 / 播客 / LinkedIn 链接 | 小素材路径（Phase 0A → 6 Agent 网络搜索/平台抓取） | 只承接入口、确认产物、回写 marker |
+| 单个文件 | 一份 PDF / transcript / 文章 / 备忘录 | 小素材路径（Phase 0A，本地素材优先） | 只承接入口、确认产物、回写 marker |
+| **本地目录** | `/Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw` 这种含 ≥ 数十个文件的文件夹 | **Nuwa `self-local-corpus` 分支** | **完全委托给 Nuwa**：把目录路径转交 Nuwa，等 Nuwa 完成 9 步路由 + Checkpoint D 质量门通过后再回写 marker |
+
+> **本地目录的关键边界**：baokuan 不读取、不分类、不复制语料正文，也不写 `source-policy.json` / `source-manifest.json` / 资产卡 / SKILL.md —— 这些一律由 Nuwa 自己处理。baokuan 只负责「接到目录路径 → 调 Nuwa → 等 Checkpoint D 退出码 0 → 写 marker」。
+
+### 走 Nuwa
+
+拿到素材入口后，调用 **nuwa-skill**：
+
+- 社交链接 / 单个文件 → 让 Nuwa 按其「蒸馏用户自己」小素材路径走（女娲 SKILL.md 里有这个特殊场景）。
+- **本地目录** → 直接告诉 Nuwa「走 `self-local-corpus` 分支」，让 Nuwa 按 `skills/nuwa-skill/SKILL.md` 中 `self-local-corpus` 那一节的 9 步路由执行（无 policy inventory → Nuwa 提草稿 → 用户确认 → 带 policy 重跑 → Checkpoint C 预算 → 六维研究 → 资产 + SKILL.md → Checkpoint D 质量门 → 回写 profile 标记）。
+
+Nuwa 的执行细节（来源 class、阅读预算、隐私扫描、产出路径）以 `references/self-distill-workflow.md` 为单一规范，baokuan 不复制规则。baokuan 唯一要守的硬约束：**绝不允许把本地目录里的任何文件复制/移动到 profile 目录或工作区其他位置**——只读。
+
+### 产物落位 + 写 marker（仅在 Nuwa Checkpoint D 通过后）
+
+Nuwa 把 profile 写到 `skills/<handle>-profile/SKILL.md`（及其 `assets/`、`references/`）后，baokuan 写 marker：
+
+```bash
+mkdir -p ~/.baokuan-factory
+echo "<绝对路径>/skills/<handle>-profile/SKILL.md" > ~/.baokuan-factory/profile
+```
+
+**写 marker 前必须跑质量门**（`scripts/quality_check.py` 对 self profile 退出码 0），失败时停止且不覆盖旧 marker：
+
+```bash
+python3 skills/nuwa-skill/scripts/quality_check.py skills/<handle>-profile
+```
+
+退出非零 → 把失败原因念给用户、让 Nuwa 回去修，**绝不用一份没通过质量门的 SKILL.md 覆盖 `~/.baokuan-factory/profile`**。
+
+### 遗留 marker 兼容
+
+如果 `~/.baokuan-factory/profile` 已经指向一份合法 `skills/<handle>/SKILL.md`（旧约定路径，没有 `-profile` 后缀），**继续接受**，不自动迁移、不自动重命名。旧路径与新路径并存，Phase 1 读 marker 时按原样注入。
+
+> 为什么要兼容旧 marker：旧路径在多个同事机器上已经跑过一段时间，迁移成本高于收益；新路径用于新蒸馏，旧路径保持只读。
+
+### 跟用户确认
+
+跟用户确认：核心心智模型、表达DNA、从夯到拉品味是否像本人。不像就让 nuwa 再精炼一轮（女娲有「更新已有 Skill」流程）。
 
 > 注意：蒸馏的是**用户自己**，不是对标对象。对标对象的人设如果也想要（比如要模仿某博主），那是另一次 nuwa 蒸馏，存成另一个 handle，别覆盖用户自己的。
 
@@ -186,6 +225,9 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 - **拆完没有"翻拍稿"、没法成片**：这是最常见的断链——别跳过 **Step 3 写翻拍稿**（产出 `口播/<片名>/翻拍稿.md`）。「翻拍角度」只是立场，不是能念的稿。
 - **没卡片/没截图**：八成是上一条（没翻拍稿就没录音、talking-head-edit 没被触发），或没 `/browse`。先补翻拍稿、补素材，再成片。
 - **profile 注入不准**：八成是 Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错了。重蒸或改标记文件。
+- **本地目录蒸馏被 baokuan 自己吃掉了**：Phase O 必须把目录路径原样转给 Nuwa `self-local-corpus` 分支；baokuan 不读 `source_root`、不写 policy、不分类语料正文。如果你发现 baokuan 直接读目录、或者本目录被复制到工作区，立刻停止并把目录路径写进笔记，本期不允许 baokuan 越界做盘点。
+- **profile 路径形态不对**：新蒸馏必须写到 `skills/<handle>-profile/SKILL.md`（被 `.gitignore` 忽略），不要写到旧 `skills/<handle>/SKILL.md`；旧 marker 继续接受，但新蒸馏一律用 `-profile` 后缀路径。`git status --ignored` 应该能看到 `skills/<handle>-profile/`。
+- **质量门跑不过就写 marker 了**：Phase O 写 `~/.baokuan-factory/profile` 之前必须 `python3 skills/nuwa-skill/scripts/quality_check.py skills/<handle>-profile` 退出码 0；非零就停下，把失败项交给 Nuwa 修，绝不覆盖旧 marker。
 - **发布：social-auto-upload 装法**（Step 6 用，外部公开仓库 github.com/dreammis/social-auto-upload，MIT，`brew` 装不了，自己装。需 `uv` + `python3.10~3.12`）：
   ```
   cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git
