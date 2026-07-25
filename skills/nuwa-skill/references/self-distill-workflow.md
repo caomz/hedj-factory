@@ -101,8 +101,8 @@
 
 | 来源 class | 单轮上限 | 超出处理 |
 |-----------|---------|----------|
-| `authored` | 总量 ≤ 20 MB | 显式分批；每批单独跑 Checkpoint C |
-| `private-evidence` | 默认 ≤ 100 文件或 5 MB（先到者优先），且优先读 `summaries/`、`analysis/` 目录 | 禁止引用原始聊天正文；只引用脱敏摘要或主题归纳 |
+| `authored` | 总量 ≤ 20 MB（20MB） | 显式分批；每批单独跑 Checkpoint C |
+| `private-evidence` | 默认 ≤ 100 文件或 5 MB（5MB），先到者优先；优先读 `summaries/`、`analysis/` 目录 | 禁止引用原始聊天正文；只引用脱敏摘要或主题归纳 |
 | `adapted` | ≤ 30 文件 | 必须记录用户改写部分，不可整段引用原作者 |
 | `external` | 首轮 0 文件 | 仅当用于核实或对照用户个人主张时按需读取，且不进入个人资产登记 |
 
