@@ -46,3 +46,19 @@
   - 当前 CLI 成功路径只完成参数与边界校验；US-004 应在 `validate_inputs()` 之后接入确定性遍历，不应提前增加 manifest 写入
   - `--policy` 在 US-003 只要求可解析参数，不校验文件存在性或内容；这些属于 US-006，避免 story 越界
 ---
+
+## 2026-07-25 02:18 - US-004
+- 在 US-003 的参数校验后接入确定性遍历：os.walk(followlinks=False, onerror=抛 InventoryError)，跳过隐藏条目与目录 symlink，对非隐藏常规文件按相对路径字典序返回基础记录
+- `determine_eligibility` 按 oversized → unsupported_extension → binary 顺序给出稳定 exclusion_reason，并把小写扩展名一次性回传，避免 record 构造处重复 `.suffix.lower()`
+- `summarize_inventory` 单次遍历累加 eligible_files / skipped_by_extension / oversized_files / binary_files，13k+ 文件减少 3 次冗余扫描
+- 新增 LocalCorpusTraversalTests 五例：排序与必需字段、隐藏+symlink 跳过、10 种受支持扩展名 ineligible 判定、unsupported+binary 计数、oversized 稳定排除
+- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：`python3 -m unittest tests.test_nuwa_local_corpus.LocalCorpusTraversalTests -v`（5 OK）+ LocalCorpusInputValidationTests（6 OK 回归）；AST 解析；`git diff --check` 通过；CLI 端到端 `--check` 重复运行输出完全一致，源目录 SHA-256 清单前后一致
+- 提交：be4005e feat: US-004 - 实现确定性遍历和文件资格判定
+- 同步更新：scripts/ralph/prd.json 中 US-004 passes=true
+- **未来迭代的学习：**
+  - record 字段集合（relative_path/extension/size_bytes/mtime/top_level_family/eligible/policy_class/exclusion_reason）是 US-005 manifest 的事实契约；后续 story 增加字段（如 sha256/duplicate_group/version_group/can_distill）时必须保持键名稳定，不在原地改类型
+  - `top_level_family = "."` 是 root-level 文件的统一占位，Nuwa 用作 Checkpoint A 草拟 policy 的 family 摘要；后续不应改成空串或相对路径
+  - `is_binary_file` 仅做 NUL 字节 + UTF-8 解码快速判定，会把 Windows-1252/GBK 等合法文本误判为 binary；如 US-011 隐私扫描要把 GBK 文本按文本处理，需要在那里引入编码探测，不要扩展此函数
+  - `summarize_inventory` 单次遍历与 record 字段集合锁定后，US-005 复用同一份 records 计算 manifest，US-018 的 `--check` 性能基线（13k 文件 ≤120s）由本实现满足；后续不要在 walk 中再做额外 lstat
+  - US-004 显式不引入 symlink 跟随、firmlink 边界检测、APFS 大小写归一化、Unicode NFC/NFD 等；这些超出 v1 范围，由 US-005 后续讨论决定是否扩展，避免 story 越界
