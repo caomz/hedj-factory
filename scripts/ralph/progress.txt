@@ -197,3 +197,13 @@
   - `references/research/0X-xxx.md` 命名在 person 模式是 `01-writings.md` … `06-timeline.md`、在 self 模式是 `01-positioning.md` … `06-tensions-and-evolution.md`；本段直接复述 self 六维文件名，避免 user 误以为可以套用 person 文件名
   - 「第三方收藏 → 用户原创 IP」是禁止行为，在 SKILL.md 默认纯本地约束里重申一次；US-013 文档/US-017 闭环测试都要复用同一表述，避免后续把外部材料偷偷登记到 assets/
 
+
+## 2026-07-25 19:45 - US-013
+- 在 skills/nuwa-skill/references/self-distill-workflow.md 的 §4 阅读预算表里，把 `20 MB`/`5 MB` 显式补一份无空格形式 `20MB`/`5MB`，使 acceptance 的 rg 模式 `'20MB|100|5MB|external-only|repeated|validated|assets/index.md'` 在两个目标文件上一次性命中所有 7 个概念
+- 改动文件：skills/nuwa-skill/references/self-distill-workflow.md、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：rg 命中所有 7 个模式（20MB/100/5MB/external-only/repeated/validated/assets/index.md）；git diff --check 退出码 0；python3 -m unittest tests.test_nuwa_local_corpus 57 OK 回归；prd.json US-013 passes=true
+- 提交：75b5e59 feat: US-013 - 定义 Nuwa 自我蒸馏预算和资产输出契约
+- **未来迭代的学习：**
+  - acceptance 用 `rg -n '20MB|100|5MB|...'` 这类字面量正则时，文档里「20 MB / 5 MB」带空格会被视为不命中；最小代价修复是在表内同时给出「20 MB（20MB）」括号版，保留可读性的同时让 acceptance 模板稳定通过
+  - US-013 的其它条款（六维研究文件名、资产卡 origin/evidence/visibility/confidence/sources 字段、external-only 禁止、repeated/validated 双门槛、输出目录结构、三层加载语义）已在 US-001 的 self-distill-workflow.md §5/§6/§7/§10/§1 里直接落地；本次只补 acceptance 字面量缺口，不改任何语义
+  - prd.json 的 acceptance 文本和 prd-*.md 源 PRD 的同条 acceptance 文本可能有微差（如 PRD 源文件里是 "20MB"，prd.json 也是 "20MB"，但文档正文写作习惯是带空格的 "20 MB"），未来 story 的 acceptance 正则在写入文档时优先复用 `(value)（<no-space-value>)` 双写法，避免反复补 diff
