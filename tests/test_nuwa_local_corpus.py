@@ -22,6 +22,8 @@ from inventory_local_corpus import (
     summarize_inventory,
     write_manifest_and_review,
     _compute_sha256,
+    assign_version_groups,
+    count_version_summary,
 )
 
 
@@ -157,6 +159,9 @@ class LocalCorpusTraversalTests(unittest.TestCase):
                 "sha256",
                 "duplicate_group",
                 "semantic_read",
+                "version_group",
+                "current_version",
+                "evolution_only",
             },
         )
 
@@ -330,6 +335,9 @@ class LocalCorpusOutputTests(unittest.TestCase):
                         "sha256",
                         "duplicate_group",
                         "semantic_read",
+                        "version_group",
+                        "current_version",
+                        "evolution_only",
                     },
                 )
 
@@ -830,6 +838,161 @@ class DuplicateDetectionTests(unittest.TestCase):
             actual = _compute_sha256(note)
 
         self.assertEqual(actual, expected)
+
+
+class VersionSelectionTests(unittest.TestCase):
+    """覆盖 US-008：版本序列 current_version 判定。"""
+
+    def test_version_groups_pick_highest_tuple_as_current(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            (source_root / "notes").mkdir()
+            (source_root / "notes" / "draft-v0.1.md").write_text(
+                "early draft", encoding="utf-8"
+            )
+            (source_root / "notes" / "draft-v0.2.md").write_text(
+                "later draft", encoding="utf-8"
+            )
+            (source_root / "notes" / "draft-v1.md").write_text(
+                "current draft", encoding="utf-8"
+            )
+            (source_root / "notes" / "unversioned.md").write_text(
+                "no version marker", encoding="utf-8"
+            )
+
+            records = inventory_local_corpus(source_root)
+
+        by_path = {record["relative_path"]: record for record in records}
+        # 版本序列只覆盖三个有版本标记的文件。
+        self.assertEqual(by_path["notes/draft-v1.md"]["current_version"], True)
+        self.assertEqual(by_path["notes/draft-v1.md"]["evolution_only"], False)
+        self.assertEqual(by_path["notes/draft-v0.2.md"]["current_version"], False)
+        self.assertEqual(by_path["notes/draft-v0.2.md"]["evolution_only"], True)
+        self.assertEqual(by_path["notes/draft-v0.1.md"]["current_version"], False)
+        self.assertEqual(by_path["notes/draft-v0.1.md"]["evolution_only"], True)
+        # 无版本标记的文件不参与分组。
+        self.assertIsNone(by_path["notes/unversioned.md"]["version_group"])
+        self.assertFalse(by_path["notes/unversioned.md"]["current_version"])
+        self.assertFalse(by_path["notes/unversioned.md"]["evolution_only"])
+
+        # version_group 在三个版本序列文件之间相同。
+        self.assertEqual(
+            by_path["notes/draft-v1.md"]["version_group"],
+            by_path["notes/draft-v0.1.md"]["version_group"],
+        )
+
+        summary = count_version_summary(records)
+        self.assertEqual(summary["version_groups"], 1)
+        self.assertEqual(summary["current_paths"], ["notes/draft-v1.md"])
+
+    def test_version_groups_are_case_insensitive_and_compare_numeric_tuple(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            (source_root / "plans").mkdir()
+            (source_root / "plans" / "plan-V2.md").write_text(
+                "uppercase v2", encoding="utf-8"
+            )
+            (source_root / "plans" / "plan-V10.md").write_text(
+                "uppercase v10", encoding="utf-8"
+            )
+            (source_root / "plans" / "plan-v0.2.3.md").write_text(
+                "multi segment", encoding="utf-8"
+            )
+
+            records = inventory_local_corpus(source_root)
+
+        by_path = {record["relative_path"]: record for record in records}
+        # V10 应被视为最高版本。
+        self.assertTrue(by_path["plans/plan-V10.md"]["current_version"])
+        self.assertTrue(by_path["plans/plan-V2.md"]["evolution_only"])
+        self.assertTrue(by_path["plans/plan-v0.2.3.md"]["evolution_only"])
+
+        summary = count_version_summary(records)
+        self.assertEqual(summary["version_groups"], 1)
+        self.assertEqual(summary["current_paths"], ["plans/plan-V10.md"])
+
+    def test_files_without_version_marker_are_not_grouped(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            (source_root / "journal.md").write_text("journal", encoding="utf-8")
+            (source_root / "vlog.md").write_text("vlog", encoding="utf-8")
+            (source_root / "save.md").write_text("save", encoding="utf-8")
+
+            records = inventory_local_corpus(source_root)
+
+        for record in records:
+            self.assertIsNone(record["version_group"])
+            self.assertFalse(record["current_version"])
+            self.assertFalse(record["evolution_only"])
+
+        summary = count_version_summary(records)
+        self.assertEqual(summary["version_groups"], 0)
+        self.assertEqual(summary["current_paths"], [])
+
+    def test_assign_version_groups_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            (source_root / "draft-v1.md").write_text("first", encoding="utf-8")
+            (source_root / "draft-v2.md").write_text("second", encoding="utf-8")
+
+            records = inventory_local_corpus(source_root)
+            first_state = [
+                (
+                    record["relative_path"],
+                    record["version_group"],
+                    record["current_version"],
+                    record["evolution_only"],
+                )
+                for record in records
+            ]
+            assign_version_groups(records)
+            second_state = [
+                (
+                    record["relative_path"],
+                    record["version_group"],
+                    record["current_version"],
+                    record["evolution_only"],
+                )
+                for record in records
+            ]
+
+        self.assertEqual(first_state, second_state)
+
+    def test_review_lists_version_group_count_and_current_paths(self):
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_us008_"))
+        try:
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            (source_root / "notes").mkdir()
+            (source_root / "notes" / "plan-v0.1.md").write_text(
+                "old", encoding="utf-8"
+            )
+            (source_root / "notes" / "plan-v0.2.md").write_text(
+                "newer", encoding="utf-8"
+            )
+            (source_root / "notes" / "plan-v0.3.md").write_text(
+                "newest", encoding="utf-8"
+            )
+
+            profile_dir = work_dir / "profile"
+            records = inventory_local_corpus(source_root)
+            summary = summarize_inventory(records)
+            write_manifest_and_review(
+                profile_dir, records, source_root, summary, 2_000_000
+            )
+
+            review_text = (
+                profile_dir / "references" / "research" / "00-source-inventory.md"
+            ).read_text(encoding="utf-8")
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+        self.assertIn("## 版本序列", review_text)
+        self.assertIn("version_groups: 1", review_text)
+        self.assertIn("notes/plan-v0.3.md", review_text)
+        self.assertNotIn("old", review_text)
+        self.assertNotIn("newer", review_text)
+        self.assertNotIn("newest", review_text)
 
 
 if __name__ == "__main__":

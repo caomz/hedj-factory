@@ -310,6 +310,44 @@ def _raise_walk_error(error: OSError) -> None:
 
 SHA256_READ_CHUNK = 65_536
 
+# US-008: 版本序列。文件名中大小写不敏感的 ``vN`` 或 ``vN.N`` 数字版本标记。
+# 必须至少包含一个数字后才算版本号，避免把单词 "vlog" 或 "save" 误判。
+# 匹配例子：v0.1, v0.2, V1, V1.2.3。
+_VERSION_PATTERN = re.compile(r"v\d+(?:\.\d+)*", re.IGNORECASE)
+
+
+def _strip_version(stem: str) -> Tuple[str, Optional[Tuple[int, ...]]]:
+    """从文件名 stem 中移除版本标记，返回 (基础名, 版本 tuple)。
+
+    - 保留原始大小写以维持确定性。
+    - 找不到版本标记时，基础名等于 stem，版本为 None。
+    - 仅替换最后一次出现的版本标记，避免误伤 stem 中的 ``v`` 字符。
+    """
+    match = None
+    for found in _VERSION_PATTERN.finditer(stem):
+        match = found
+    if match is None:
+        return stem, None
+    version = tuple(int(part) for part in match.group(0)[1:].split("."))
+    base = stem[: match.start()] + stem[match.end():]
+    return base, version
+
+
+def _version_group_key(relative_path: str) -> Optional[Tuple[str, str, str]]:
+    """计算文件的 version_group 键 (父目录, 去版本基础名, 小写扩展名)。
+
+    文件名 stem 中没有版本标记时返回 None — 该文件不参与版本序列分组。
+    """
+    posix_path = relative_path.replace(os.sep, "/")
+    parent_dir, _, filename = posix_path.rpartition("/")
+    if not filename:
+        return None
+    stem, version = _strip_version(filename.rsplit(".", 1)[0])
+    if version is None:
+        return None
+    extension = "." + filename.rsplit(".", 1)[1].lower()
+    return (parent_dir, stem, extension)
+
 
 def _compute_sha256(path: Path) -> str:
     """读取文件全文并计算 SHA-256；读取失败时抛 InventoryError。
@@ -389,6 +427,82 @@ def count_duplicate_summary(
     }
 
 
+def assign_version_groups(records: Sequence[Dict[str, object]]) -> None:
+    """按文件名中的版本标记给每条 record 写入 ``version_group`` 序列信息。
+
+    契约：
+    - 文件名 stem 中识别大小写不敏感的 ``vN[.N... ]`` 标记，例如
+      ``v0.1``、``v0.2``、``V1``、``V1.2.3``。
+    - 同一 ``(parent_dir, 去版本基础名, 小写扩展名)`` 的多个文件组成一个
+      ``version_group``。
+    - ``version_group`` 以 ``{parent_dir}/{base_name}{version_placeholder}{ext}``
+      表示，保证稳定且唯一。
+    - 数字版本 ``tuple`` 最高者标记 ``current_version=True``，其余标记
+      ``evolution_only=True``；没有版本标记的文件不写入 ``version_group``。
+    - ineligible 文件不参与分组（exclusion_reason 不为空即跳过）。
+    - 直接修改传入 ``records`` 列表中的每个 dict。
+    """
+    # 收集每个 (parent_dir, base_name, ext) 下的所有 eligible 成员。
+    groups: Dict[Tuple[str, str, str], List[Dict[str, object]]] = {}
+    for record in records:
+        if not record.get("eligible"):
+            continue
+        key = _version_group_key(record["relative_path"])  # type: ignore[arg-type]
+        if key is None:
+            continue
+        groups.setdefault(key, []).append(record)
+
+    for (parent_dir, base_name, extension), members in groups.items():
+        if not members:
+            continue
+        sorted_members = sorted(
+            members,
+            key=lambda rec: (
+                _strip_version(Path(rec["relative_path"]).name.rsplit(".", 1)[0])[1]  # type: ignore[arg-type]
+                or (),
+                rec["relative_path"],  # type: ignore[index]
+            ),
+        )
+        current = sorted_members[-1]
+        version_token = (
+            _strip_version(Path(current["relative_path"]).name.rsplit(".", 1)[0])[1]
+            or ()
+        )
+        version_label = "v" + ".".join(str(part) for part in version_token)
+        placeholder = f"{parent_dir}/{base_name}{version_label}{extension}".lstrip("/")
+        group_id = placeholder
+
+        for member in members:
+            member["version_group"] = group_id
+            member["current_version"] = member is current
+            if member is not current:
+                member["evolution_only"] = True
+            else:
+                member["evolution_only"] = False
+
+
+def count_version_summary(
+    records: Sequence[Dict[str, object]],
+) -> Dict[str, object]:
+    """汇总 version_group 数、current_version 路径列表。"""
+    groups: Dict[str, str] = {}
+    current_paths: List[str] = []
+    seen_groups: set = set()
+    for record in records:
+        group = record.get("version_group")
+        if not isinstance(group, str) or not group:
+            continue
+        if group not in seen_groups:
+            seen_groups.add(group)
+            groups[group] = ""
+        if record.get("current_version") is True:
+            current_paths.append(record["relative_path"])  # type: ignore[arg-type]
+    return {
+        "version_groups": len(seen_groups),
+        "current_paths": sorted(current_paths),
+    }
+
+
 def inventory_local_corpus(
     source_root: Path,
     max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
@@ -444,11 +558,15 @@ def inventory_local_corpus(
                     "sha256": sha256,
                     "duplicate_group": None,
                     "semantic_read": bool(eligible),
+                    "version_group": None,
+                    "current_version": False,
+                    "evolution_only": False,
                 }
             )
 
     records.sort(key=lambda record: record["relative_path"])
     assign_duplicate_groups(records)
+    assign_version_groups(records)
     return records
 
 
@@ -603,6 +721,9 @@ def _build_manifest(
                 "sha256": record.get("sha256"),
                 "duplicate_group": record.get("duplicate_group"),
                 "semantic_read": record.get("semantic_read", record["eligible"]),
+                "version_group": record.get("version_group"),
+                "current_version": record.get("current_version", False),
+                "evolution_only": record.get("evolution_only", False),
             }
         )
 
@@ -678,6 +799,21 @@ def _write_inventory_review(
         "",
     ]
 
+    version_summary = count_version_summary(manifest["files"])  # type: ignore[arg-type]
+    version_lines = "\n".join(
+        f"- `{relative}`" for relative in version_summary["current_paths"]
+    ) or "- (none)"
+    version_section = [
+        "## 版本序列",
+        "",
+        f"- version_groups: {version_summary['version_groups']}",
+        "- current_version 路径：",
+        version_lines,
+        "- 注：文件名中的 `vN[.N... ]` 标记按数字 tuple 比较，最高版本标记 "
+        "`current_version=true`，旧版只作为观点演化证据（`evolution_only=true`）。",
+        "",
+    ]
+
     can_distill = manifest["can_distill"]  # type: ignore[index]
     status_note = (
         "- can_distill: True — 所有 eligible 文件均已分类，Nuwa 可进入六维研究。"
@@ -727,6 +863,7 @@ def _write_inventory_review(
         class_lines,
         "",
         *duplicate_section,
+        *version_section,
         *unmatched_section,
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
