@@ -207,3 +207,33 @@
   - acceptance 用 `rg -n '20MB|100|5MB|...'` 这类字面量正则时，文档里「20 MB / 5 MB」带空格会被视为不命中；最小代价修复是在表内同时给出「20 MB（20MB）」括号版，保留可读性的同时让 acceptance 模板稳定通过
   - US-013 的其它条款（六维研究文件名、资产卡 origin/evidence/visibility/confidence/sources 字段、external-only 禁止、repeated/validated 双门槛、输出目录结构、三层加载语义）已在 US-001 的 self-distill-workflow.md §5/§6/§7/§10/§1 里直接落地；本次只补 acceptance 字面量缺口，不改任何语义
   - prd.json 的 acceptance 文本和 prd-*.md 源 PRD 的同条 acceptance 文本可能有微差（如 PRD 源文件里是 "20MB"，prd.json 也是 "20MB"，但文档正文写作习惯是带空格的 "20 MB"），未来 story 的 acceptance 正则在写入文档时优先复用 `(value)（<no-space-value>)` 双写法，避免反复补 diff
+
+## 2026-07-25 21:35 - US-014
+- 重写 skills/baokuan-factory/SKILL.md 的 Phase O：把"问 handle + 素材链接"扩成"入口三选一表"（社交链接 / 单个文件 / 本地目录），三种入口分别对应 Nuwa 小素材路径与 self-local-corpus 分支
+- 本地目录关键边界写成 bullet 框：baokuan 不读 source_root、不分类、不写 policy/manifest/资产卡/SKILL.md；只"接到路径 → 调 Nuwa → 等 Checkpoint D 0 → 写 marker"
+- 产物路径从 skills/<handle>/ 改为 skills/<handle>-profile/，明确该路径被 .gitignore 忽略；遗留 skills/<handle>/SKILL.md marker 继续接受、不自动迁移
+- 写 marker 前增加硬约束：必须先跑 python3 skills/nuwa-skill/scripts/quality_check.py skills/<handle>-profile 退出码 0；非零停止且不覆盖旧 marker
+- 决策树第 3 条补一句"路径可读、对应 skills/<handle>/SKILL.md 或 skills/<handle>-profile/SKILL.md 都接受"
+- 排错区追加三条：本地目录蒸馏被 baokuan 自己吃掉、profile 路径形态不对、质量门跑不过就写 marker
+- 改动文件：skills/baokuan-factory/SKILL.md、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：git diff --check -- skills/baokuan-factory/SKILL.md 退出码 0；rg -n '本地目录|<handle>-profile|self-local-corpus|quality_check.py' skills/baokuan-factory/SKILL.md 命中所有四个概念；前置 US-012/US-013 均 passes=true
+- **未来迭代的学习：**
+  - baokuan Phase O 是 onboarding 的"路由总开关"，US-014 把三种入口分支明示后，后续 US-015 README/SOP 改写 onboarding 文案、US-016 trigger-evals 补正负样本时必须复用同一"入口三选一 + 委托 Nuwa"句式，避免把 baokuan 又写成"自己读目录"
+  - 写 marker 前的 quality_check.py 命令里 profile 路径用相对形式 skills/<handle>-profile（不带 SKILL.md 后缀），是因为 quality_check.py 接受 profile 目录；US-015 README/SOP 文档示例必须复用这条命令形态，否则 US-019 闭环测试的 inline assert 会漂移
+  - "已存在且合法 skills/<handle>/SKILL.md marker 继续接受"是产品决策而非技术遗留：迁移成本高于收益，且旧路径在多台机器上已稳定运行；任何后续 story 想"统一收敛"必须先和用户确认，不要在 feature 里顺手改
+  - "本地目录"作为 baokuan 入口时必须以表格/路径示例双重强调不读不写，否则下游 prompt injection 可能诱导 baokuan 越界做盘点；US-015/US-016 在抄这段边界时必须逐字复用 "baokuan 不读取、不分类、不复制语料正文" 这串关键词
+
+## 2026-07-25 22:00 - US-015
+- README.md 与 docs/SOP.md 双双补齐"本地知识目录自我蒸馏"对外契约：README 在"它是什么"区加三入口表 + 硬边界子节(profile 路径、源目录只读、不复制、不修改、不是每个文件都被语义读取、外部归档不自动成为个人原创资产、私有聊天只允许脱敏抽象、policy 必须显式确认),并把流水线说明里的 `skills/<你>/SKILL.md` 路径同步成 `skills/<你>-profile/`
+- docs/SOP.md 在线 A 段追加「线 A 详:两种入口」表 + 「本地目录(self-local-corpus)四步硬顺序」子节（无 policy inventory → source-policy 确认 → 带 policy 重跑 + 六维蒸馏 → assets + SKILL.md + quality gate),并把一句话 SOP 里的产物路径同步成 `skills/<你>-profile/`
+- 排错区追加三条：本地目录蒸馏被 baokuan 越界做盘点、profile 路径形态不对、质量门跑不过就写 marker(完全复用 US-014 baokuan Phase O 的同一表述,避免文档口径漂移)
+- 改动文件:README.md(+16/-1)、docs/SOP.md(+29/-1)
+- 验证:`rg -n '本地目录|source-policy|assets/|不复制|外部' README.md docs/SOP.md` 命中所有 5 个概念(README 7 行 + SOP 9 行);`git diff --check -- README.md docs/SOP.md` 退出码 0
+- 提交:940ba02 feat: US-015 - 更新 README 和 SOP
+- 同步更新:scripts/ralph/prd.json 中 US-015 passes=true
+- **未来迭代的学习:**
+  - acceptance 用 `rg -n '本地目录|source-policy|assets/|不复制|外部'` 这种字面量中文模式时,README 出现 logo 路径 `docs/assets/hedj-logo.png` 也会命中 `assets/`,导致 README 端命中行偏多。这是设计意图(让验收模式无须避让 logo 资产),后续 US-016 写 trigger-evals 或 US-019 闭环时直接复用同一条 rg 即可,不要追加更复杂的模式
+  - README 与 SOP 的"硬边界"五点(不复制 / 不修改 / 不是每个文件都进 / 外部归档不登记为个人资产 / 私有聊天只脱敏)必须逐字复用 US-014 baokuan 决策树里 "baokuan 不读、不分类、不写" 同一组关键词;否则 baokuan Phase O 与 README/SOP 三处会漂移,US-019 闭环会失败
+  - `skills/<handle>-profile/` 与旧 `skills/<handle>/` 兼容是产品决策(US-014 锁定),README + SOP + 一句话 SOP 三个地方要同步把 path 改过来,不要只动 README 让 SOP 留旧路径;否则 US-016 触发评测看 SOP 时会以为新约定不存在
+  - docs/SOP.md 在"线 A 详"新增子节时,Markdown 列表项用 `**本地目录**` 加粗加 `1.` 编号 list,保留 1./2./3./4. 顺序,US-019 闭环可以用 rg `^\d\. ` 抽回四步硬顺序,无需再解析自然语言
+  - 本 milestone 文档更新是"复用现有口径"而不是"重新设计",所以本 story 的 diff 几乎全是新增段落,没有删改;后续 US-016/US-017/US-019 看到 README/SOP diff 偏大不要惊讶,这是契约向团队公开化的预期形态

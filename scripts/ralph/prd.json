@@ -288,7 +288,7 @@
         "Typecheck passes (this Markdown story uses git diff --check -- skills/baokuan-factory/SKILL.md)"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
@@ -308,7 +308,7 @@
         "Typecheck passes (Markdown validation uses git diff --check -- README.md docs/SOP.md)"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
