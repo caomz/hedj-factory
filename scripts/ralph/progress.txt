@@ -151,3 +151,32 @@
   - self 模式路径 fallback 正则 `(?<![\w/])((?:[A-Za-z0-9_\-]+/)*[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,8})(?![\w/])` 会把 URL scheme 与绝对路径过滤掉，但**仍会把 markdown 链接中的相对路径误判为来源**；US-010 隐私扫描若要更严格，须先排除 markdown link 形式
   - _detect_mode 只识别 `profile_type: self`，后续 US-012/US-013 如果扩展 self 变体（如 `profile_type: self-redacted`），需要在 _detect_mode 内补 mapping，且默认 self 仍走 SELF_AGENTS 六标签
   - 显式 `--mode person` 在 profile_type=self 的 profile 下应继续可用（如某人想用公众人物工具审计自我 profile），不要在 _detect_mode 里禁止显式覆盖
+
+## 2026-07-25 20:00 - US-010
+- 重构 skills/nuwa-skill/scripts/quality_check.py：增加 `--mode {self,person}` 与 profile_type frontmatter 自动识别；self 模式跑 4 项硬性检查（七章节齐全 / assets/index.md 存在 / SKILL.md 含 assets/ 相对链接 / token 预算 3000–6000），person 模式沿用旧六项心智模型检查并保持退出码契约
+- 新增 check_self_sections / check_assets_index / check_assets_link / check_self_token_budget / estimate_tokens / detect_profile_type；token 估算使用 `CJK 字符数 + ceil(非 CJK 字符数 / 4)`，>6000 退出非零、<3000 仅警告
+- 测试：tests/test_nuwa_local_corpus.py 新增 QualityStructureTests 10 例（干净 self 通过、缺失章节列出全部缺失名、缺 assets/index.md 失败、缺 assets/ 链接失败、token>6000 失败、token<3000 仅警告、SKILL.md 路径作为 target、显式 --mode 覆盖 frontmatter 自动检测、person 旧契约回归、自动检测 self）
+- 改动文件：skills/nuwa-skill/scripts/quality_check.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v（49 OK，含旧 39 + 新 10）；AST 解析；git diff --check 通过
+- 同步更新：scripts/ralph/prd.json 中 US-010 passes=true
+- **未来迭代的学习：**
+  - `quality_check.py` 接受 profile 目录或 SKILL.md 路径；当 target 是文件时把 parent 视作 profile 目录（用于找 assets/index.md）。后续 US-011/US-019 闭环测试可复用同一入口；不要再拆出 `--profile-dir` 之类参数
+  - 自动检测只看 SKILL.md frontmatter 的 `profile_type:`；profile 目录附带 references/source-manifest.json 不影响模式识别。若 US-019 闭环需要 audit 一个「public SKILL.md 但来自 self 流程」的 profile，仍以 frontmatter 为准
+  - token 估算把 frontmatter + 章节标题 + 链接文本都算上；self 模板第 1 行 frontmatter + 7 章节标题 + 7 个 `[..](../assets/x.md)` 链接大约消耗 ~200 tokens，写 US-019 闭环时如要让 SKILL.md 落在 3000–6000，正文 CJK 字符数应控制在 3000 左右
+  - person 模式保留旧退出码契约（total-1 通过仍 exit 0），是因为旧调用方可能依赖它；US-019 全量回归前不要再收紧，避免把 person 流程也变成非零
+  - privacy 扫描规则（CREDENTIAL_ASSIGNMENT/WECHAT_ID/CHATROOM_ID/PRIVATE_IPV4）按 self-distill-workflow.md §8 由 US-011 实现，本 milestone 仅占位并暴露 `check_assets_*` 系列函数；US-011 接入时复用 `resolve_profile_paths` + `check_assets_index`，不要重新走文件系统
+
+## 2026-07-25 20:30 - US-011
+- 在 skills/nuwa-skill/scripts/quality_check.py 增加 PRIVACY_RULES（4 个稳定 rule id）、scan_privacy_in_text、scan_privacy_gate、format_privacy_findings，导入 ipaddress 做 RFC1918 判定；self 模式契约加入「公开面隐私扫描」硬性检查，输出 5 项 5/5
+- 隐私扫描只走 SKILL.md + assets/*.md，references/source-manifest.json 与 references/research/ 完全跳过；findings 只输出 rule id + 相对路径 + 行号，敏感值永不回显
+- 测试新增 PrivacyGateTests 8 例：干净 profile 通过、wxid_/chatroom/credential/RFC1918 IPv4 各命中、public IPv4 不误报、references/ 即使含 wxid_/chatlog/微信/10.0.0.7 也不触发、findings 行号格式；更新 QualityStructureTests.test_self_clean_profile_passes 的 4/4 → 5/5 断言
+- 改动文件：skills/nuwa-skill/scripts/quality_check.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json
+- 验证：python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v（57 OK，含旧 49 + 新 8）；AST 解析通过；git diff --check 通过；CLI 端到端在临时 profile 上命中 token=fake_should_not_match 时输出 `CREDENTIAL_ASSIGNMENT @ SKILL.md:10` 但不回显值
+- 提交：091f0bb feat: US-011 - 增加 self profile 公开面隐私扫描
+- 同步更新：scripts/ralph/prd.json 中 US-011 passes=true
+- **未来迭代的学习：**
+  - `PRIVACY_RULES` 是 self-distill-workflow.md §8 锁定的稳定 rule id + pattern 集合；US-013/US-019 若扩展规则（如 EMAIL_ADDRESS / PHONE_NUMBER），必须复用同一 dict 结构、保持 id 不变；新增规则时优先在 references/self-distill-workflow.md §8 同步更新枚举表
+  - 隐私扫描的输出策略是「绝不回显敏感值」：findings 只打印 rule id / 相对路径 / 行号。下游任何日志/UI/脚本必须复用该格式，否则会破坏 US-019 闭环断言
+  - PRIVATE_IPV4 用 ipaddress.IPv4Address 校验 `_is_private_ipv4` 才能正确区分公网/内网（避免 8.8.8.8 误报）；纯 regex 会把公网 IP 误报为内网，后续若引入 IPv6 规则必须同样走 ipaddress.IPv6Address，不要简单扩展 regex
+  - scan_privacy_gate 只 glob `assets/*.md`，不递归子目录；这是与 quality_check 同级调用约定一致的简化策略，US-019 全量回归时若 `assets/` 出现子目录需要先在此扩 glob
+  - 隐私扫描只走公开面（SKILL.md + assets/*.md），references/ 完全跳过；US-017 合成语料端到端测试在写「私有面命中」断言时必须严格把 fixture 放到 references/ 下，否则会变成 US-011 误报

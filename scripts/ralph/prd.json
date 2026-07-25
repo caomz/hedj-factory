@@ -204,7 +204,7 @@
         "Typecheck passes (Python AST parsing succeeds for quality_check.py and its tests)"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
@@ -224,7 +224,7 @@
         "Typecheck passes (Python AST parsing succeeds for quality_check.py and privacy tests)"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
