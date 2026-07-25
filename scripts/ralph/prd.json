@@ -368,8 +368,8 @@
         "Typecheck passes (the repository-equivalent check is successful Python AST parsing plus the read-only CLI exit code 0)"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "[验证通过 - 第1次] 2026-07-26 00:30\n- 在 inventory_local_corpus.py --check 中合并 count_duplicate_summary 的 duplicate_groups 字段；\n  用 time.monotonic() 在 run() 入口打点，输入校验/盘点/policy/summary 全部纳入耗时，最终 elapsed_seconds 一并写入 stdout 摘要。\n- 真实目录 /Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw 退出码 0；total_files=13427、eligible_files=11516、ineligible_files=1911、skipped_by_extension=29、oversized_files=7、binary_files=1875、duplicate_files=242、duplicate_groups=237、elapsed_seconds=104.849s（多次 15–119s，I/O 压力大时偶发 128s）。\n- 13451 个常规文件 SHA 前后逐字节一致；skills/ 下无 profile 产物；\n  stdout 不含源文件正文/wxid_/@chatroom/凭据值。",
       "retryCount": 0,
       "blocked": false
     },
@@ -395,8 +395,8 @@
         "Typecheck passes (for this repository, all Markdown/JSON/Python validation commands above succeed)"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "[验证通过 - 第1次] 2026-07-26 00:30\n- US-001..US-018 全部 passes=true 后启动本 story。\n- 静态 fixture tests/fixtures/nuwa-self-distill/test-user-profile/：SKILL.md (frontmatter profile_type: self, 7 章节齐全, 含 assets/ 相对链接) + 8 个 assets 页面 (index + positioning / core-theses / operating-principles / systems-and-workflows / cases-and-evidence / content-motifs / tensions-and-evolution / reusable-products，每张含 origin/evidence/visibility/confidence/sources 五个稳定字段) + references/source-policy.json (schema_version=1, 5 类 rule) + references/source-manifest.json (schema_version=1, can_distill=true) + 7 个 references/research/{00..06}-*.md (00 inventory review, 01..06 self 六维)。\n- quality_check.py tests/fixtures/nuwa-self-distill/test-user-profile 退出码 0，5/5 通过：7 章节齐全、assets/index.md 存在、assets/ 相对链接、token 1263 < 3000 仅警告、公开面隐私扫描通过。\n- 公众人物 merge/quality golden fixture 全部 63 tests 通过（无回归）。\n- 仓库验证命令全部通过：git diff --check 退出码 0、nuwa scripts AST 全部通过、python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v 63 OK、python3 -m json.tool .optimize/trigger-evals.json 合法。\n- git status --short 仅本 feature 范围：M scripts/ralph/prd.json、M scripts/ralph/progress.txt、M skills/nuwa-skill/scripts/inventory_local_corpus.py、?? tests/fixtures/nuwa-self-distill/test-user-profile/。\n  其他 untracked 文件（.agents/、AGENTS.md、docs/gstack-hedj-factory-practical-guide.md、scripts/ralph/CLAUDE.md、scripts/ralph/VALIDATOR.md、scripts/ralph/archive/、scripts/ralph/dashboard*.html、scripts/ralph/dashboard.py、scripts/ralph/ralph.py、tasks/）均为 Ralph 任务开始时已存在的 pre-existing 文件，不属于本 feature scope。\n- 未运行 install.sh、sync.sh、发布命令、commit/push、merge/rebase、reset、git pull、sau、外部 trigger eval 或消耗外部 model quota 的任何命令。",
       "retryCount": 0,
       "blocked": false
     }

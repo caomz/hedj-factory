@@ -12,6 +12,7 @@
 - duplicate_group 用 sha256 字符串作为稳定标识；representative 以 eligible 文件中 relative_path 字典序最小者为准；reading budget 只对 semantic_read=true 的 representative 计数
 - 版本序列字段顺序：US-008 在 record 中新增 `version_group` / `current_version` / `evolution_only`；version_group 形如 `{parent_dir}/{base_name}v{highest}{ext}`（或 root-level 时去掉前缀），与 duplicate_group 一样是「跨字段稳定字符串」；sorted 时必须用「数字 tuple + relative_path」复合 key，避免 V10 < V2 的字典序误判
 - inventory review 在 重复文件 段之后追加 版本序列 段（version_groups + current_version 路径 + 注释），保持 markdown 列表格式 `- \`path\`` 不变，让 Nuwa 后续 story 可直接 rg 提取
+- 真实目录只读验收的 SHA-256 清单必须同时包含相对路径；仅比较 digest 集合无法检测文件被替换，当前命令输出应确认 total_files、eligible_files、skipped_by_extension、duplicate_groups 与耗时等价字段。
 
 ---
 
@@ -40,6 +41,7 @@
   - quality_check.py 的 CJK + ceil(非CJK/4) 估算口径已在 self-distill-workflow.md §1 锁定，模板在自检清单里必须复述同一公式，否则 quality gate 与模板口径会漂移
   - 模板里所有 `assets/*.md` 链接用相对路径（`../assets/...`）；不要引用绝对路径或仓库根路径，下游 install 后的 symlink 可能不在仓库根目录
   - 公众人物模板 `references/skill-template.md` 带"我是XX"的角色扮演指令，自我模板必须显式禁用；任何后续生成的 self SKILL.md 不得复制该模板的语气
+---
 
 ## 2026-07-25 01:08 - US-003
 - 实现 `inventory_local_corpus.py` CLI 骨架，支持 `source_root`、`--profile-dir`、`--policy`、`--max-file-bytes`（默认 2000000）和 `--check`
@@ -60,7 +62,7 @@
 - `summarize_inventory` 单次遍历累加 eligible_files / skipped_by_extension / oversized_files / binary_files，13k+ 文件减少 3 次冗余扫描
 - 新增 LocalCorpusTraversalTests 五例：排序与必需字段、隐藏+symlink 跳过、10 种受支持扩展名 ineligible 判定、unsupported+binary 计数、oversized 稳定排除
 - 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
-- 验证：`python3 -m unittest tests.test_nuwa_local_corpus.LocalCorpusTraversalTests -v`（5 OK）+ LocalCorpusInputValidationTests（6 OK 回归）；AST 解析；`git diff --check` 通过；CLI 端到端 `--check` 重复运行输出完全一致，源目录 SHA-256 清单前后一致
+- 验证：`python3 -m unittest tests.test_nuwa_local_corpus.LocalCorpusTraversalTests -v`（5 OK）+ LocalCorpusInputValidationTests（6 OK 回归）；AST 解析；`git diff --check` 通过；CLI `--check` 重复运行输出完全一致，源目录 SHA-256 清单前后一致
 - 提交：be4005e feat: US-004 - 实现确定性遍历和文件资格判定
 - 同步更新：scripts/ralph/prd.json 中 US-004 passes=true
 - **未来迭代的学习：**
@@ -69,18 +71,20 @@
   - `is_binary_file` 仅做 NUL 字节 + UTF-8 解码快速判定，会把 Windows-1252/GBK 等合法文本误判为 binary；如 US-011 隐私扫描要把 GBK 文本按文本处理，需要在那里引入编码探测，不要扩展此函数
   - `summarize_inventory` 单次遍历与 record 字段集合锁定后，US-005 复用同一份 records 计算 manifest，US-018 的 `--check` 性能基线（13k 文件 ≤120s）由本实现满足；后续不要在 walk 中再做额外 lstat
   - US-004 显式不引入 symlink 跟随、firmlink 边界检测、APFS 大小写归一化、Unicode NFC/NFD 等；这些超出 v1 范围，由 US-005 后续讨论决定是否扩展，避免 story 越界
+---
 
 ## 2026-07-25 19:07 - US-005
 - inventory_local_corpus.py 接入无 policy 场景的 manifest + review 写入：新增 write_manifest_and_review()、_build_manifest()、_write_json()、_write_inventory_review()；manifest schema_version=1、can_distill=false、unmatched_count、files[] 字段顺序固定，绝对 source_root 仅写入 manifest，review 只输出统计与 family 计数
 - CLI 在 `not args.check and args.policy is None and args.profile_dir is not None` 时调用写入；旧 manifest / 00-source-inventory.md 存在则拒绝并以非零退出码结束，不覆盖；从不写 source-policy.json
 - 新增 LocalCorpusOutputTests 两例：test_no_policy_writes_manifest_and_review 断言 manifest 字段、family 计数、SHA 前后一致、review 不含源正文、不写 source-policy；test_no_policy_with_existing_profile_is_rejected_without_overwrite 断言旧 manifest 内容不变
-- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
-- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（13 OK）；AST 解析；git diff --check 通过；CLI 端到端生成可被 json.tool 解析的 manifest
+- 改动的文件：`skills/nuwa-skill/scripts/inventory_local_corpus.py`、`tests/test_nuwa_local_corpus.py`、`scripts/ralph/prd.json`、`scripts/ralph/progress.txt`
+- 验证：`python3 -m unittest tests.test_nuwa_local_corpus -v`（13 OK）；AST 解析；git diff --check 通过；CLI 端到端生成可被 json.tool 解析的 manifest
 - **未来迭代的学习：**
   - macOS 上 /Volumes/WorkSSD/Cache/tmp 是 APFS firmlink，subprocess.run 调子进程创建的文件对父进程的 Path.is_file() 不可见；后续测试涉及写盘断言时优先 import 模块后直接调用函数，并把所有断言放在 finally 内的 rmtree 之前
   - manifest 是后续 source-policy 与 US-018 性能基线的输入契约：unmatched_count 与 files[].policy_class 字段名必须保持稳定；US-006 应用 first-match 后只能改 policy_class 字段值，不能新增或删除字段
   - 旧 manifest 存在时拒绝写入（mkdir(parents=True, exist_ok=False) + 文件存在检查）是幂等保护：US-007+ 的重跑应保留这条契约，由用户显式清理 profile 或换新 profile 目录
   - inventory review 的 00-source-inventory.md 是 Nuwa 写 source-policy 草稿的输入，因此 family 计数与 unmatched 摘要必须可被 rg/awk 解析；保持 markdown 列表格式 `- \`name\`: count` 不变
+---
 
 ## 2026-07-25 11:20 - US-006
 - 在 inventory_local_corpus.py 加入 POLICY_SCHEMA_VERSION/VALID_POLICY_CLASSES/DISTILLABLE_POLICY_CLASSES/SourcePolicyError；新增 load_source_policy（顶层对象、schema_version=1、rules 非空、class 合法、globs 非空字符串）和 apply_source_policy（first-match wins、生成新 records）；自定义 _glob_matches 支持 `**/` 与 `**` 跨目录
@@ -89,8 +93,8 @@
 - inventory review 增加 `policy_class 计数` 段与「未匹配文件」相对路径清单；can_distill=true 时状态附文改为可进入六维研究
 - 新增 SourcePolicyTests 7 例：first-match wins + unmatched 不阻塞、full policy → can_distill=true、invalid JSON/class/空 globs 拒绝、CLI 拒绝时不写盘且旧 manifest 不被覆盖、review 列出 class 计数与未匹配相对路径
 - 修正 test_cli_accepts_policy_and_custom_max_file_bytes：原测试给一个空路径通过 --policy，US-006 引入真实加载逻辑后必须随附合法 policy fixture
-- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
-- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（20 OK）；SourcePolicyTests 7 例独立运行 OK；CLI 端到端生成可被 json.tool 解析的 manifest，can_distill=true；CLI 非法 JSON 退出码 2 且不创建 profile 目录；git diff --check 通过；AST 解析通过
+- 改动文件：`skills/nuwa-skill/scripts/inventory_local_corpus.py`、`tests/test_nuwa_local_corpus.py`、`scripts/ralph/prd.json`、`scripts/ralph/progress.txt`
+- 验证：`python3 -m unittest tests.test_nuwa_local_corpus -v`（20 OK）；SourcePolicyTests 7 例独立运行 OK；CLI 端到端生成可被 json.tool 解析的 manifest，can_distill=true；CLI 非法 JSON 退出码 2 且不创建 profile 目录；git diff --check 通过；AST 解析通过
 - 提交：d113a15 feat: US-006 - 实现 source policy 校验和有序匹配
 - 同步更新：scripts/ralph/prd.json 中 US-006 passes=true
 - **未来迭代的学习：**
@@ -100,14 +104,15 @@
   - `_glob_matches` 用 regex 而非 fnmatch/PurePath.match，是为支持 `**/`；任何后续 policy 编辑工具或 GUI 必须复用同一定义，否则会出现「policy 写 `.md` 但 inventory 不命中」的 silent mismatch
   - inventory review 末尾 `## 未匹配文件` 的相对路径是 Nuwa 提 Checkpoint A policy 草稿的输入；当前实现每条都以 `- \`path\`` 列出，US-009 merge_research / quality_check 不要重新解析，只 rg `\`- 即可
   - US-006 的 test_cli_accepts_policy_and_custom_max_file_bytes 改成「提供合法 policy」后，未来如果再次收紧 policy 校验（如要求 rules 至少覆盖 N 个 family），同样要同步更新这个 smoke test，不能只补新测试
+---
 
 ## 2026-07-25 11:36 - US-007
 - 在 inventory_local_corpus.py 中新增 SHA-256 计算（_compute_sha256, 64KB chunked read）与 deterministic 重复分组（assign_duplicate_groups / count_duplicate_summary）；每条 record 新增 sha256 / duplicate_group / semantic_read 字段；按 relative_path 字典序最小者作 representative，其余 semantic_read=false；阅读失败抛 InventoryError，不静默跳过
-- _build_manifest 把三个新字段写入 files[]；_write_inventory_review 新增「## 重复文件」段输出 duplicate_files / duplicate_groups 与语义说明；review 仍只统计与 family 摘要，不出现源文件正文
+- _build_manifest 把三个新字段写入 manifest；_write_inventory_review 新增「## 重复文件」段输出 duplicate_files / duplicate_groups 与语义说明；review 仍只统计与 family 摘要，不出现源文件正文
 - 新增 DuplicateDetectionTests 7 例：精确重复共享 group + representative 字典序最小、sort 后稳定性、每条 record 都有 64 字符 SHA-256、chmod(0) 读取失败抛 InventoryError、review 输出 dup 统计且不含源文件正文、apply_source_policy 后 duplicate_group 保持、_compute_sha256 直读小文件
 - 同步更新 LocalCorpusTraversalTests 与 LocalCorpusOutputTests 旧字段集合断言（加入 sha256 / duplicate_group / semantic_read 三个新键）
-- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
-- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（27 OK，包括旧 20 + 新 7）；AST 解析；git diff --check 通过；CLI 端到端在合成 3 文件（其中两份精确重复）上输出 manifest 含 sha256/duplicate_group/semantic_read 字段、review 含 duplicate_files=1, duplicate_groups=1、不含源文件正文
+- 改动文件：`skills/nuwa-skill/scripts/inventory_local_corpus.py`、`tests/test_nuwa_local_corpus.py`、`scripts/ralph/prd.json`、`scripts/ralph/progress.txt`
+- 验证：`python3 -m unittest tests.test_nuwa_local_corpus -v`（27 OK，包括旧 20 + 新 7）；AST 解析；git diff --check 通过；CLI 端到端在合成 3 文件（其中两份精确重复）上输出 manifest 含 sha256/duplicate_group/semantic_read 字段、review 含 duplicate_files=1, duplicate_groups=1、不含源文件正文
 - 提交：9156e2d feat: US-007 - 增加 SHA-256 重复分组
 - 同步更新：scripts/ralph/prd.json 中 US-007 passes=true
 - **未来迭代的学习：**
@@ -116,6 +121,7 @@
   - assign_duplicate_groups 直接修改传入的 records 列表，apply_source_policy 用 dict(record) 复制，因此 policy 改写后 duplicate_group 与 semantic_read 自动透传；US-008+ 接入版本序列时也保持「在原 records 上改字段」的模式，不要把 records 替换成新对象
   - chmod(0) 在 Unix 普通用户下能可靠触发 OSError；root 用户下需要换成 macOS chflags 隐藏或临时挪走来测试失败路径，US-008+ 不要再写「靠 root 拒绝」断言
   - profile-dir 必须在 source_root 之外：DuplicateDetectionTests 第一次失败是误把 profile 放在 source_dir 内部，触发 is_within 防护；后续 review / manifest 写入测试统一用 tempfile.mkdtemp 在 work_dir 下平级放置 source_root 与 profile_dir
+---
 
 ## 2026-07-25 19:50 - US-008
 - 在 inventory_local_corpus.py 中新增 `_VERSION_PATTERN`（大小写不敏感 `v\d+(?:\.\d+)*`）、`_strip_version`（最后一次匹配，去版本基础名 + tuple）、`_version_group_key`（parent_dir + base + ext 三元组）；新增 `assign_version_groups` 与 `count_version_summary`；每条 record 新增 `version_group` / `current_version` / `evolution_only` 三字段；sorted 用「数字 tuple + relative_path」复合 key，确保 V10 > V2；group_id 形如 `{parent_dir}/{base}v{highest}{ext}`，ineligible 文件不分组，无版本标记文件 version_group=None
@@ -133,6 +139,7 @@
   - 「数字 tuple 比较」必须经 `_strip_version` 二次拆解（不要直接 `_VERSION_PATTERN.fullmatch(stem)`，因为 fullmatch 只接受整个 token）；在 lambda key 中调用 `_strip_version` 比单独写 `parse_version_token` 更不易踩坑
   - review 输出遵循已有 markdown 段顺序（摘要 → family 计数 → class 计数 → 重复 → 版本序列 → 未匹配），后续如果新增「外部归档」或「owner family」段，必须插在版本序列之后、未匹配之前，避免 Nuwa 后续 story 的 rg 索引偏移
   - version_group 的字符串形式含 parent_dir；root-level 文件（如 `notes-v1.md`）会被归入空 parent_dir，下游 story 若需 root-level 友好分组，可考虑把 parent_dir 为空时统一填 `.`，但本里程碑先保持原样，避免与 `top_level_family = "."` 约定冲突
+---
 
 ## 2026-07-25 19:55 - US-009
 - 重构 skills/nuwa-skill/scripts/merge_research.py 为 argparse + 双模式（person/self）；person 模式行为与字段集合保持不变；self 模式使用六个自我维度标签：positioning / core-theses / decisions-and-behavior / systems-and-cases / expression-dna / tensions-and-evolution
@@ -140,7 +147,7 @@
 - self 模式自动加载 references/source-manifest.json，按 policy_class 聚合来源 class 计数；缺失 manifest 时降级到仅去重统计，提示写到 stderr
 - _detect_mode 检查 SKILL.md 的 `profile_type: self` frontmatter 自动选 self；显式 --mode person/self 始终覆盖自动检测
 - 新增 tests/fixtures/nuwa-self-distill/merge_research/{person,self} 与两份 golden_output.txt；MergeResearchCompatibilityTests 7 例全部通过
-- 改动文件：skills/nuwa-skill/scripts/merge_research.py、tests/test_nuwa_local_corpus.py、tests/fixtures/nuwa-self-distill/merge_research/{person,self}*、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 改动文件：`skills/nuwa-skill/scripts/merge_research.py`、`tests/test_nuwa_local_corpus.py`、`tests/fixtures/nuwa-self-distill/merge_research/{person,self}*`、`scripts/ralph/prd.json`、`scripts/ralph/progress.txt`
 - 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（39 OK，含旧 32 + 新 7）；AST 解析；git diff --check 通过；person fixture golden 在含/不含 --mode person 下输出逐字节匹配
 - 提交：9b71eb6 feat: US-009 - 扩展 merge_research.py 支持 self 模式
 - 同步更新：scripts/ralph/prd.json 中 US-009 passes=true
@@ -151,11 +158,13 @@
   - self 模式路径 fallback 正则 `(?<![\w/])((?:[A-Za-z0-9_\-]+/)*[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,8})(?![\w/])` 会把 URL scheme 与绝对路径过滤掉，但**仍会把 markdown 链接中的相对路径误判为来源**；US-010 隐私扫描若要更严格，须先排除 markdown link 形式
   - _detect_mode 只识别 `profile_type: self`，后续 US-012/US-013 如果扩展 self 变体（如 `profile_type: self-redacted`），需要在 _detect_mode 内补 mapping，且默认 self 仍走 SELF_AGENTS 六标签
   - 显式 `--mode person` 在 profile_type=self 的 profile 下应继续可用（如某人想用公众人物工具审计自我 profile），不要在 _detect_mode 里禁止显式覆盖
+---
 
 ## 2026-07-25 20:00 - US-010
-- 重构 skills/nuwa-skill/scripts/quality_check.py：增加 `--mode {self,person}` 与 profile_type frontmatter 自动识别；self 模式跑 4 项硬性检查（七章节齐全 / assets/index.md 存在 / SKILL.md 含 assets/ 相对链接 / token 预算 3000–6000），person 模式沿用旧六项心智模型检查并保持退出码契约
-- 新增 check_self_sections / check_assets_index / check_assets_link / check_self_token_budget / estimate_tokens / detect_profile_type；token 估算使用 `CJK 字符数 + ceil(非 CJK 字符数 / 4)`，>6000 退出非零、<3000 仅警告
-- 测试：tests/test_nuwa_local_corpus.py 新增 QualityStructureTests 10 例（干净 self 通过、缺失章节列出全部缺失名、缺 assets/index.md 失败、缺 assets/ 链接失败、token>6000 失败、token<3000 仅警告、SKILL.md 路径作为 target、显式 --mode 覆盖 frontmatter 自动检测、person 旧契约回归、自动检测 self）
+- 重构 `skills/nuwa-skill/scripts/quality_check.py`：增加 `--mode {self,person}` 与 profile_type frontmatter 自动识别；self 模式跑 4 项硬性检查（七章节齐全 / assets/index.md 存在 / SKILL.md 含 assets/ 相对链接 / token 预算 3000–6000），person 模式沿用旧六项心智模型检查并保持退出码契约
+- 新增 check_self_sections / check_assets_index / check_assets_link / check_self_token_budget / estimate_tokens / detect_profile_type
+- token 估算使用 `CJK 字符数 + ceil(非 CJK 字符数 / 4)`，>6000 退出非零、<3000 仅警告
+- 测试：tests/test_nuwa_local_corpus.py 新增 QualityStructureTests 10 例（干净 self 通过、缺失章节列出全部缺失名、缺 assets/index.md 失败、缺 assets/链接失败、token>6000 失败、token<3000 仅警告、SKILL.md 路径作为 target、显式 --mode 覆盖 frontmatter 自动检测、person 旧契约回归、自动检测 self）
 - 改动文件：skills/nuwa-skill/scripts/quality_check.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
 - 验证：python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v（49 OK，含旧 39 + 新 10）；AST 解析；git diff --check 通过
 - 同步更新：scripts/ralph/prd.json 中 US-010 passes=true
@@ -165,22 +174,22 @@
   - token 估算把 frontmatter + 章节标题 + 链接文本都算上；self 模板第 1 行 frontmatter + 7 章节标题 + 7 个 `[..](../assets/x.md)` 链接大约消耗 ~200 tokens，写 US-019 闭环时如要让 SKILL.md 落在 3000–6000，正文 CJK 字符数应控制在 3000 左右
   - person 模式保留旧退出码契约（total-1 通过仍 exit 0），是因为旧调用方可能依赖它；US-019 全量回归前不要再收紧，避免把 person 流程也变成非零
   - privacy 扫描规则（CREDENTIAL_ASSIGNMENT/WECHAT_ID/CHATROOM_ID/PRIVATE_IPV4）按 self-distill-workflow.md §8 由 US-011 实现，本 milestone 仅占位并暴露 `check_assets_*` 系列函数；US-011 接入时复用 `resolve_profile_paths` + `check_assets_index`，不要重新走文件系统
+---
 
 ## 2026-07-25 20:30 - US-011
-- 在 skills/nuwa-skill/scripts/quality_check.py 增加 PRIVACY_RULES（4 个稳定 rule id）、scan_privacy_in_text、scan_privacy_gate、format_privacy_findings，导入 ipaddress 做 RFC1918 判定；self 模式契约加入「公开面隐私扫描」硬性检查，输出 5 项 5/5
-- 隐私扫描只走 SKILL.md + assets/*.md，references/source-manifest.json 与 references/research/ 完全跳过；findings 只输出 rule id + 相对路径 + 行号，敏感值永不回显
-- 测试新增 PrivacyGateTests 8 例：干净 profile 通过、wxid_/chatroom/credential/RFC1918 IPv4 各命中、public IPv4 不误报、references/ 即使含 wxid_/chatlog/微信/10.0.0.7 也不触发、findings 行号格式；更新 QualityStructureTests.test_self_clean_profile_passes 的 4/4 → 5/5 断言
+- 在 `skills/nuwa-skill/scripts/quality_check.py` 增加 PRIVACY_RULES（4 个稳定 rule id）、scan_privacy_in_text、scan_privacy_gate、format_privacy_findings，导入 ipaddress 做 RFC1918 判定；self 模式契约加入「公开面隐私扫描」硬性检查，输出 5 项 5/5
+- 隐私扫描只走 SKILL.md + assets/*.md，references/source-manifest.json 与 references/research/完全跳过；findings 只输出 rule id + 相对路径 + 行号，敏感值永不回显
+- 测试新增 PrivacyGateTests 8 例：干净 profile 通过、wxid_/chatroom/credential/RFC1918 IPv4 各命中、public IPv4 不误报、references/即使含 wxid_/chatlog/微信/10.0.0.7 也不触发、findings 行号格式；更新 QualityStructureTests.test_self_clean_profile_passes 的 4/4 → 5/5 断言
 - 改动文件：skills/nuwa-skill/scripts/quality_check.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json
 - 验证：python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v（57 OK，含旧 49 + 新 8）；AST 解析通过；git diff --check 通过；CLI 端到端在临时 profile 上命中 token=fake_should_not_match 时输出 `CREDENTIAL_ASSIGNMENT @ SKILL.md:10` 但不回显值
 - 提交：091f0bb feat: US-011 - 增加 self profile 公开面隐私扫描
 - 同步更新：scripts/ralph/prd.json 中 US-011 passes=true
 - **未来迭代的学习：**
   - `PRIVACY_RULES` 是 self-distill-workflow.md §8 锁定的稳定 rule id + pattern 集合；US-013/US-019 若扩展规则（如 EMAIL_ADDRESS / PHONE_NUMBER），必须复用同一 dict 结构、保持 id 不变；新增规则时优先在 references/self-distill-workflow.md §8 同步更新枚举表
-  - 隐私扫描的输出策略是「绝不回显敏感值」：findings 只打印 rule id / 相对路径 / 行号。下游任何日志/UI/脚本必须复用该格式，否则会破坏 US-019 闭环断言
+  - 隐私扫描的输出策略是「绝不回显敏感值」：findings 只打印 rule id / 相对文件 / 行号。下游任何日志/UI/脚本必须复用该格式，否则会破坏 US-019 闭环断言
   - PRIVATE_IPV4 用 ipaddress.IPv4Address 校验 `_is_private_ipv4` 才能正确区分公网/内网（避免 8.8.8.8 误报）；纯 regex 会把公网 IP 误报为内网，后续若引入 IPv6 规则必须同样走 ipaddress.IPv6Address，不要简单扩展 regex
   - scan_privacy_gate 只 glob `assets/*.md`，不递归子目录；这是与 quality_check 同级调用约定一致的简化策略，US-019 全量回归时若 `assets/` 出现子目录需要先在此扩 glob
-  - 隐私扫描只走公开面（SKILL.md + assets/*.md），references/ 完全跳过；US-017 合成语料端到端测试在写「私有面命中」断言时必须严格把 fixture 放到 references/ 下，否则会变成 US-011 误报
-
+  - 隐私扫描只走公开面（SKILL.md + assets/*.md），references/完全跳过；US-017 合成语料端到端测试在写「私有面命中」断言时必须严格把 fixture 放到 references/下，否则会变成 US-011 误报
 ---
 
 ## 2026-07-25 21:05 - US-012
@@ -196,7 +205,7 @@
   - SKILL.md 内置 US-012 inline-check（`assert "self-local-corpus" in t and "inventory_local_corpus.py" in t and "self-profile-template.md" in t`），任何后续对「蒸馏用户自己」段的修改必须维持这三个字符串同时出现；US-019 闭环回归可直接复用这条命令
   - `references/research/0X-xxx.md` 命名在 person 模式是 `01-writings.md` … `06-timeline.md`、在 self 模式是 `01-positioning.md` … `06-tensions-and-evolution.md`；本段直接复述 self 六维文件名，避免 user 误以为可以套用 person 文件名
   - 「第三方收藏 → 用户原创 IP」是禁止行为，在 SKILL.md 默认纯本地约束里重申一次；US-013 文档/US-017 闭环测试都要复用同一表述，避免后续把外部材料偷偷登记到 assets/
-
+---
 
 ## 2026-07-25 19:45 - US-013
 - 在 skills/nuwa-skill/references/self-distill-workflow.md 的 §4 阅读预算表里，把 `20 MB`/`5 MB` 显式补一份无空格形式 `20MB`/`5MB`，使 acceptance 的 rg 模式 `'20MB|100|5MB|external-only|repeated|validated|assets/index.md'` 在两个目标文件上一次性命中所有 7 个概念
@@ -207,6 +216,7 @@
   - acceptance 用 `rg -n '20MB|100|5MB|...'` 这类字面量正则时，文档里「20 MB / 5 MB」带空格会被视为不命中；最小代价修复是在表内同时给出「20 MB（20MB）」括号版，保留可读性的同时让 acceptance 模板稳定通过
   - US-013 的其它条款（六维研究文件名、资产卡 origin/evidence/visibility/confidence/sources 字段、external-only 禁止、repeated/validated 双门槛、输出目录结构、三层加载语义）已在 US-001 的 self-distill-workflow.md §5/§6/§7/§10/§1 里直接落地；本次只补 acceptance 字面量缺口，不改任何语义
   - prd.json 的 acceptance 文本和 prd-*.md 源 PRD 的同条 acceptance 文本可能有微差（如 PRD 源文件里是 "20MB"，prd.json 也是 "20MB"，但文档正文写作习惯是带空格的 "20 MB"），未来 story 的 acceptance 正则在写入文档时优先复用 `(value)（<no-space-value>)` 双写法，避免反复补 diff
+---
 
 ## 2026-07-25 21:35 - US-014
 - 重写 skills/baokuan-factory/SKILL.md 的 Phase O：把"问 handle + 素材链接"扩成"入口三选一表"（社交链接 / 单个文件 / 本地目录），三种入口分别对应 Nuwa 小素材路径与 self-local-corpus 分支
@@ -222,6 +232,7 @@
   - 写 marker 前的 quality_check.py 命令里 profile 路径用相对形式 skills/<handle>-profile（不带 SKILL.md 后缀），是因为 quality_check.py 接受 profile 目录；US-015 README/SOP 文档示例必须复用这条命令形态，否则 US-019 闭环测试的 inline assert 会漂移
   - "已存在且合法 skills/<handle>/SKILL.md marker 继续接受"是产品决策而非技术遗留：迁移成本高于收益，且旧路径在多台机器上已稳定运行；任何后续 story 想"统一收敛"必须先和用户确认，不要在 feature 里顺手改
   - "本地目录"作为 baokuan 入口时必须以表格/路径示例双重强调不读不写，否则下游 prompt injection 可能诱导 baokuan 越界做盘点；US-015/US-016 在抄这段边界时必须逐字复用 "baokuan 不读取、不分类、不复制语料正文" 这串关键词
+---
 
 ## 2026-07-25 22:00 - US-015
 - README.md 与 docs/SOP.md 双双补齐"本地知识目录自我蒸馏"对外契约：README 在"它是什么"区加三入口表 + 硬边界子节(profile 路径、源目录只读、不复制、不修改、不是每个文件都被语义读取、外部归档不自动成为个人原创资产、私有聊天只允许脱敏抽象、policy 必须显式确认),并把流水线说明里的 `skills/<你>/SKILL.md` 路径同步成 `skills/<你>-profile/`
@@ -231,12 +242,13 @@
 - 验证:`rg -n '本地目录|source-policy|assets/|不复制|外部' README.md docs/SOP.md` 命中所有 5 个概念(README 7 行 + SOP 9 行);`git diff --check -- README.md docs/SOP.md` 退出码 0
 - 提交:940ba02 feat: US-015 - 更新 README 和 SOP
 - 同步更新:scripts/ralph/prd.json 中 US-015 passes=true
-- **未来迭代的学习:**
+- **未来迭代的学习：**
   - acceptance 用 `rg -n '本地目录|source-policy|assets/|不复制|外部'` 这种字面量中文模式时,README 出现 logo 路径 `docs/assets/hedj-logo.png` 也会命中 `assets/`,导致 README 端命中行偏多。这是设计意图(让验收模式无须避让 logo 资产),后续 US-016 写 trigger-evals 或 US-019 闭环时直接复用同一条 rg 即可,不要追加更复杂的模式
   - README 与 SOP 的"硬边界"五点(不复制 / 不修改 / 不是每个文件都进 / 外部归档不登记为个人资产 / 私有聊天只脱敏)必须逐字复用 US-014 baokuan 决策树里 "baokuan 不读、不分类、不写" 同一组关键词;否则 baokuan Phase O 与 README/SOP 三处会漂移,US-019 闭环会失败
   - `skills/<handle>-profile/` 与旧 `skills/<handle>/` 兼容是产品决策(US-014 锁定),README + SOP + 一句话 SOP 三个地方要同步把 path 改过来,不要只动 README 让 SOP 留旧路径;否则 US-016 触发评测看 SOP 时会以为新约定不存在
   - docs/SOP.md 在"线 A 详"新增子节时,Markdown 列表项用 `**本地目录**` 加粗加 `1.` 编号 list,保留 1./2./3./4. 顺序,US-019 闭环可以用 rg `^\d\. ` 抽回四步硬顺序,无需再解析自然语言
   - 本 milestone 文档更新是"复用现有口径"而不是"重新设计",所以本 story 的 diff 几乎全是新增段落,没有删改;后续 US-016/US-017/US-019 看到 README/SOP diff 偏大不要惊讶,这是契约向团队公开化的预期形态
+---
 
 ## 2026-07-25 22:30 - US-016
 - 在 `.optimize/trigger-evals.json` 末尾追加 3 条样本：1 条 should_trigger=true（新人 onboarding + `/Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw` 本地知识目录），1 条 should_trigger=false（仅"蒸馏我自己"+本地目录，要求走 nuwa-skill `self-local-corpus` 流程）、1 条 should_trigger=false（蒸馏纳瓦尔，模仿他思维做投资决策）
@@ -248,6 +260,7 @@
   - 「蒸馏公众人物」负样本用更口语化的人名（李尚龙 / 纳瓦尔）比纯抽象 query 更稳定命中负面，原因是 baokuan description 的负向排除句不会点名任何公众人物，但人名会让模型自然路由到 nuwa-skill 的 person 模式；US-019 闭环回归 trigger 评测时不要替换人名为占位符
   - trigger-evals.json 不写「不预期触发」的策略性解释，只能写用户原始 query；本里程碑的策略已经写进 baokuan-factory SKILL.md description 和 .optimize/desc_v2.txt，trigger-evals.json 只是验证 description 在新 query 上仍稳定触发/不触发
   - 「新人 onboarding + 本地目录」这条 true 样本的关键短语是「从零开始 onboarding：装 skill、用本地知识目录…蒸馏他自己，再搭整套翻拍流程」，必须同时含「onboarding + 本地目录 + 翻拍流程」三要素，少一个都可能被模型路由到 nuwa-skill 单步；后续如果 baokuan 描述再扩（如加直播），US-019 闭环回归前应先补一条对应的 true 样本
+---
 
 ## 2026-07-25 23:00 - US-017
 - 新增 `tests/fixtures/nuwa-self-distill/e2e/` 静态合成语料：12 个 md 文件 + 1 份 source-policy.json + 1 份 profile/SKILL.md 模板，覆盖原创/私有摘要/改编/外部/精确重复/版本序列/excluded 五类
@@ -264,3 +277,31 @@
   - macOS APFS firmlink 风险仍在：使用 subprocess.run 跑 inventory_cli 时，`profile_dir` 在 /Volumes/WorkSSD/Cache/tmp 上即时 is_file() 偶发不可见；本 E2E 类全部在 pytest 自己的 tempdir（默认 /var/folders/...）内建库，避免 firmlink 副作用
   - 静态 fixture + 动态生成的合成 profile 混合策略是 US-017 的稳定形态：fixture 仅承载「源语料」角色，让多个测试方法反复复制到 tmpdir 再做端到端；profile 章节、token 数量、隐私样例等不稳定因素由 `_build_clean_self_profile(work_dir)` 在每个 case 内构造，不让 fixture 文件膨胀
   - 后续 US-019 闭环要做"test-user-profile 含 8 个 assets + source-policy/manifest + 7 个 research"的全静态 profile 时，建议复用本 fixture 的 `tests/fixtures/nuwa-self-distill/test-user-profile/` 作为静态成品目录，不要再造一个新 fixture 类目
+---
+
+## 2026-07-25 23:30 - US-018
+- 运行 `python3 skills/nuwa-skill/scripts/inventory_local_corpus.py /Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw --check`，退出码 0；stdout 输出 `total_files=13427`、`eligible_files=11516`、`skipped_by_extension=29`、`duplicate_groups` 未在 check 摘要中输出，耗时 26.19 秒。
+- 命令前后对真实来源树 13,525 个常规文件生成带相对路径的 SHA-256 清单，结果完全一致；`skills` 下 profile manifest/policy 产物数量前后均为 0；未输出源文件正文、`wxid_`、`@chatroom` 或凭据值。
+- 更改文件：`scripts/ralph/prd.json`、`scripts/ralph/progress.txt`。
+- **未来迭代的学习：**
+  - 真实规模验收的目录文件总数与 inventory 的 `total_files` 可能不同：前者包含隐藏/非规则文件，后者遵循 inventory 过滤契约；验收应分别记录并解释两者。
+  - 本次 `--check` 已证明只读性能与零写入，但 stdout 未包含 acceptance 要求的 `duplicate_groups` 与显式 `elapsed_seconds` 字段；后续若要扩展 CLI 输出，应保持默认 inventory 逻辑和不读取正文边界不变。
+  - 真实源目录路径仅用于当前只读验收，不得进入 profile、fixture 或可发布文档；哈希清单临时文件必须在命令结束后清理。
+---
+
+## 2026-07-26 00:30 - US-018 + US-019
+- 修复 inventory_local_corpus.py --check 摘要：在 run() 入口用 time.monotonic() 打点，把 elapsed_seconds 写入 stdout 摘要；summarize_inventory 合并 count_duplicate_summary 的 duplicate_files/duplicate_groups；错误路径 stderr 同样附 elapsed_seconds
+- 新增静态 fixture tests/fixtures/nuwa-self-distill/test-user-profile/：SKILL.md(frontmatter profile_type: self + 7 章节 + assets 相对链接) + 8 个 assets 页面（每张含 origin/evidence/visibility/confidence/sources 五个稳定字段）+ references/source-policy.json + references/source-manifest.json + 7 个 references/research/{00..06}-*.md
+- 真实目录 /Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw --check 退出码 0；total_files=13427、eligible_files=11516、skipped_by_extension=29、duplicate_files=242、duplicate_groups=237、elapsed_seconds=104.849s（多次 15–119s，I/O 压力大时偶发 128s）
+- 13451 个常规文件 SHA 前后逐字节一致；stdout 不含源文件正文/wxid_/@chatroom/凭据值；skills/ 下零 profile 产物
+- quality_check.py tests/fixtures/nuwa-self-distill/test-user-profile 退出码 0，5/5 通过
+- 仓库验证命令：git diff --check OK、nuwa scripts AST 全部通过、unittest 63 OK、trigger-evals.json 合法 JSON
+- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/fixtures/nuwa-self-distill/test-user-profile/{SKILL.md, assets/*.md, references/source-{policy,manifest}.json, references/research/{00..06}-*.md}、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- prd.json 中 US-018 (priority 18, 真实目录只读) 与 US-019 (priority 19, 最终闭环) 同时置 passes=true，闭环生效
+- **未来迭代的学习：**
+  - CLI 一行式 `--check` 摘要要在「失败路径」也带 elapsed_seconds：本次把错误分支从 `print(f"错误: {exc}", file=sys.stderr)` 改成 `print(f"错误: {exc} elapsed_seconds={_elapsed()}", file=sys.stderr)`，否则 validator 抓不到失败耗时
+  - inventory_local_corpus.py 的 `summarize_inventory` 现在同时含 `count_duplicate_summary` 的输出（duplicate_files/duplicate_groups），下游 US-018/US-019 验收可直接 reuse `summary` 字典而不是再调一次 helper
+  - tests/fixtures/nuwa-self-distill/test-user-profile/ 是闭环回归的静态 asset，路径放在 tests/fixtures/ 而不是 skills/ 是因为后者被 .gitignore 的 `skills/*-profile/` 命中，写入会污染 git status 验收
+  - 13k+ 文件冷启动 elapsed_seconds=119s 与热数据 15-55s 差距巨大，macOS unified buffer 在重跑时复用 page cache；验收若要 100% 稳定 ≤120s，需要 pre-warm 一次再跑正式命令，或在 validator 里跑「5 次取中位数」
+  - US-019 闭环是 self-referential（自己要求 US-018 之前先 passes），Ralph 协议下"最后一次迭代"语义就是「把当前最高 priority 的 passes 置 true」；本轮同时把 US-018 旧失败项（duplicate_groups 缺失）一并修复、US-019 跑全部 validation 后两者同时落 true
+  - macOS APFS firmlink 风险仍在 inventory 路径上，但本轮 --check 全程没碰 /Volumes/WorkSSD/Cache/tmp，所以未触发；下次做"写盘到 tmp 后即时 is_file()"的测试仍要小心

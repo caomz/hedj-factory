@@ -17,6 +17,7 @@ import os
 import re
 import stat
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -571,7 +572,13 @@ def inventory_local_corpus(
 
 
 def summarize_inventory(records: Sequence[Dict[str, object]]) -> Dict[str, int]:
-    """汇总 check 模式需要的非语义计数。"""
+    """汇总 check 模式需要的非语义计数。
+
+    同时叠加 ``count_duplicate_summary``，因此输出会包含
+    ``duplicate_files``/``duplicate_groups``。重复分组在调用此函数前必须
+    已经通过 ``assign_duplicate_groups`` 完成，否则 ``duplicate_group`` 为
+    ``None``，这两个字段均为 0。
+    """
     eligible_files = 0
     skipped_by_extension = 0
     oversized_files = 0
@@ -588,7 +595,7 @@ def summarize_inventory(records: Sequence[Dict[str, object]]) -> Dict[str, int]:
         elif reason == "binary":
             binary_files += 1
     total_files = len(records)
-    return {
+    summary: Dict[str, int] = {
         "total_files": total_files,
         "eligible_files": eligible_files,
         "ineligible_files": total_files - eligible_files,
@@ -596,19 +603,36 @@ def summarize_inventory(records: Sequence[Dict[str, object]]) -> Dict[str, int]:
         "oversized_files": oversized_files,
         "binary_files": binary_files,
     }
+    duplicate_summary = count_duplicate_summary(records)
+    summary["duplicate_files"] = duplicate_summary["duplicate_files"]
+    summary["duplicate_groups"] = duplicate_summary["duplicate_groups"]
+    return summary
 
 
 def run(argv: Optional[Sequence[str]] = None) -> int:
-    """执行 CLI；通过输入校验后只读盘点并输出元数据统计。"""
+    """执行 CLI；通过输入校验后只读盘点并输出元数据统计。
+
+    成功路径的 stdout 摘要包含 ``duplicate_groups`` 与 ``elapsed_seconds``，
+    便于 US-018 真实目录只读验收脚本一次性抓取 13k+ 文件规模下的耗时。
+    错误路径在 stderr 单独打印 ``elapsed_seconds``，不混入主摘要。
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    start = time.monotonic()
+
+    def _elapsed() -> float:
+        return round(time.monotonic() - start, 3)
 
     try:
         validate_inputs(args)
         source_root = args.source_root.expanduser().resolve()
         records = inventory_local_corpus(source_root, args.max_file_bytes)
     except (InputValidationError, InventoryError) as exc:
-        print(f"错误: {exc}", file=sys.stderr)
+        print(
+            f"错误: {exc} elapsed_seconds={_elapsed()}",
+            file=sys.stderr,
+        )
         return 2
 
     policy: Optional[Dict[str, object]] = None
@@ -616,11 +640,15 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         try:
             policy = load_source_policy(args.policy.expanduser().resolve(strict=False))
         except SourcePolicyError as exc:
-            print(f"错误: {exc}", file=sys.stderr)
+            print(
+                f"错误: {exc} elapsed_seconds={_elapsed()}",
+                file=sys.stderr,
+            )
             return 2
         records = apply_source_policy(records, policy)
 
     summary = summarize_inventory(records)
+    summary["elapsed_seconds"] = _elapsed()
     mode = "check" if args.check else "inventory"
     fields = " ".join(f"{key}={value}" for key, value in summary.items())
     print(
@@ -639,7 +667,10 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                 policy=policy,
             )
         except (InputValidationError, InventoryError, OSError) as exc:
-            print(f"错误: {exc}", file=sys.stderr)
+            print(
+                f"错误: {exc} elapsed_seconds={_elapsed()}",
+                file=sys.stderr,
+            )
             return 2
 
     return 0

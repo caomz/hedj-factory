@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "class": "excluded",
+      "globs": ["authored/legacy.md"]
+    },
+    {
+      "class": "authored",
+      "globs": ["authored/**/*"]
+    },
+    {
+      "class": "private-evidence",
+      "globs": ["private/**/*"]
+    },
+    {
+      "class": "adapted",
+      "globs": ["adapted/**/*"]
+    },
+    {
+      "class": "external",
+      "globs": ["external/**/*"]
+    }
+  ]
+}

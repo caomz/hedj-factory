@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-26T00:30:00Z",
+  "source_root": "(synthetic fixture corpus under tests/fixtures/nuwa-self-distill/e2e/corpus)",
+  "max_file_bytes": 2000000,
+  "can_distill": true,
+  "unmatched_count": 0,
+  "summary": {
+    "total_files": 12,
+    "eligible_files": 12,
+    "ineligible_files": 0,
+    "skipped_by_extension": 0,
+    "oversized_files": 0,
+    "binary_files": 0
+  },
+  "files": []
+}
