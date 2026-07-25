@@ -133,3 +133,21 @@
   - 「数字 tuple 比较」必须经 `_strip_version` 二次拆解（不要直接 `_VERSION_PATTERN.fullmatch(stem)`，因为 fullmatch 只接受整个 token）；在 lambda key 中调用 `_strip_version` 比单独写 `parse_version_token` 更不易踩坑
   - review 输出遵循已有 markdown 段顺序（摘要 → family 计数 → class 计数 → 重复 → 版本序列 → 未匹配），后续如果新增「外部归档」或「owner family」段，必须插在版本序列之后、未匹配之前，避免 Nuwa 后续 story 的 rg 索引偏移
   - version_group 的字符串形式含 parent_dir；root-level 文件（如 `notes-v1.md`）会被归入空 parent_dir，下游 story 若需 root-level 友好分组，可考虑把 parent_dir 为空时统一填 `.`，但本里程碑先保持原样，避免与 `top_level_family = "."` 约定冲突
+
+## 2026-07-25 19:55 - US-009
+- 重构 skills/nuwa-skill/scripts/merge_research.py 为 argparse + 双模式（person/self）；person 模式行为与字段集合保持不变；self 模式使用六个自我维度标签：positioning / core-theses / decisions-and-behavior / systems-and-cases / expression-dna / tensions-and-evolution
+- self 模式从研究文件 frontmatter 的 sources / source_paths / relative_sources 字段读相对源路径；正文 fallback 仅匹配裸词相对路径；维度内与跨维度双层去重（同一相对路径只计一次）；不再依赖 URL
+- self 模式自动加载 references/source-manifest.json，按 policy_class 聚合来源 class 计数；缺失 manifest 时降级到仅去重统计，提示写到 stderr
+- _detect_mode 检查 SKILL.md 的 `profile_type: self` frontmatter 自动选 self；显式 --mode person/self 始终覆盖自动检测
+- 新增 tests/fixtures/nuwa-self-distill/merge_research/{person,self} 与两份 golden_output.txt；MergeResearchCompatibilityTests 7 例全部通过
+- 改动文件：skills/nuwa-skill/scripts/merge_research.py、tests/test_nuwa_local_corpus.py、tests/fixtures/nuwa-self-distill/merge_research/{person,self}*、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（39 OK，含旧 32 + 新 7）；AST 解析；git diff --check 通过；person fixture golden 在含/不含 --mode person 下输出逐字节匹配
+- 提交：9b71eb6 feat: US-009 - 扩展 merge_research.py 支持 self 模式
+- 同步更新：scripts/ralph/prd.json 中 US-009 passes=true
+- **未来迭代的学习：**
+  - merge_research.py 的 CLI 接口是 Nuwa 自检的固定入口：US-013/US-017 后续若要替换表格样式，必须保持「六维度 + 总来源 + 矛盾 + 信息不足」四行结构，便于 nuwa 脚本/文档 rg 索引
+  - self 模式 class 计数放在表格外（避免 24 字符槽位截断），约定形式为 `class counts: name=count`，按 count 降序名字典序排；后续如果 US-013 资产卡审计要复用，必须复用同一字符串形态
+  - frontmatter 解析只用极简手写 YAML（不支持嵌套、注释块、tag），目的是避免 PyYAML 依赖；US-010 quality_check.py 若也需要 frontmatter，建议复用同一解析函数而非各写一套
+  - self 模式路径 fallback 正则 `(?<![\w/])((?:[A-Za-z0-9_\-]+/)*[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,8})(?![\w/])` 会把 URL scheme 与绝对路径过滤掉，但**仍会把 markdown 链接中的相对路径误判为来源**；US-010 隐私扫描若要更严格，须先排除 markdown link 形式
+  - _detect_mode 只识别 `profile_type: self`，后续 US-012/US-013 如果扩展 self 变体（如 `profile_type: self-redacted`），需要在 _detect_mode 内补 mapping，且默认 self 仍走 SELF_AGENTS 六标签
+  - 显式 `--mode person` 在 profile_type=self 的 profile 下应继续可用（如某人想用公众人物工具审计自我 profile），不要在 _detect_mode 里禁止显式覆盖
