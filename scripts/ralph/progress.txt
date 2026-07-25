@@ -1,0 +1,34 @@
+## Codebase Patterns
+- `skills/<name>-profile/` 是被 .gitignore 忽略的个人 profile 目录；下游 runtime 仍可加载
+- nuwa-skill 的研究材料命名固定为 `references/research/01-XX.md` 到 `06-XX.md`，合并工具 merge_research.py 按文件名扫描
+- 公众人物 quality_check.py 当前不区分 profile_type；新增 self 模式需要在 frontmatter 检测后切换校验
+- 自我蒸馏工作流文档统一引用单一规范；任何 story 在进入 self 流程前必须先读 references/self-distill-workflow.md，不得从 SKILL.md 重新猜测 class/checkpoint
+- self 模式默认纯本地：除非用户明确要求，不联网佐证；外部材料只允许在 references/research/ 对照，不进入 assets/
+
+---
+
+## 2026-07-25 00:12 - US-001
+- 新建 skills/nuwa-skill/references/self-distill-workflow.md（264 行）
+- 内容覆盖五类来源 class、四个 source policy 确认点、六个自我研究维度、阅读预算表（authored ≤20MB/private-evidence ≤100 文件或 5MB/adapted ≤30/external 首轮 0）、版本序列 current 判定、资产卡证据门槛、隐私脱敏默认、三层输出边界、失败停止条件
+- 改动文件：skills/nuwa-skill/references/self-distill-workflow.md
+- 提交：73cff0c feat: US-001 - 编写自我蒸馏工作流参考文档
+- **未来迭代的学习：**
+  - 仓库 nuwa-skill 当前只有 person 模式文档；新 self-local-corpus 路径必须在 references/ 下先立单一规范文档，再让后续 story 引用，避免 story 间口径漂移
+  - 阅读预算表是后续 quality_check.py 估算与 inventory 报告的统一基线：所有 story 引用时必须使用同一数值
+  - 隐私扫描规则 ID（CREDENTIAL_ASSIGNMENT / WECHAT_ID / CHATROOM_ID / PRIVATE_IPV4）已在工作流锁定；后续 privacy gate 实现不得新增或重命名规则 ID
+  - 资产卡 origin 五选一（authored/co-created/private-derived/adapted/external）已是契约；external-only 不得登记为个人资产
+---
+
+## 2026-07-25 00:35 - US-002
+- 新建 skills/nuwa-skill/references/self-profile-template.md（125 行）
+- frontmatter 声明 `profile_type: self` 与 `target_tokens: 3000-6000`；七个必需 section 标题与 US-010 acceptance regex 完全一致（含 `表达DNA` 不带空格）
+- 模板硬性边界：不模拟公众人物、不编造用户经历、private-evidence 仅以脱敏主题归纳进入、链接到 assets/*.md 引用相对路径
+- 自检清单预先列出 US-010 quality_check.py 验收点（心智模型 ≥2 场景证据、决策启发式含案例、隐私扫描、token 估算落 3000–6000）
+- 改动文件：skills/nuwa-skill/references/self-profile-template.md
+- 提交：24d2456 feat: US-002 - 编写自我 profile 运行时模板
+- 同步更新：scripts/ralph/prd.json 中 US-002 passes=true
+- **未来迭代的学习：**
+  - acceptance regex 把 `表达DNA` 当作单一 token，模板正文与自检清单都得去掉空格；不要因为 Markdown 排版偏好插半角空格
+  - quality_check.py 的 CJK + ceil(非CJK/4) 估算口径已在 self-distill-workflow.md §1 锁定，模板在自检清单里必须复述同一公式，否则 quality gate 与模板口径会漂移
+  - 模板里所有 `assets/*.md` 链接用相对路径（`../assets/...`）；不要引用绝对路径或仓库根路径，下游 install 后的 symlink 可能不在仓库根目录
+  - 公众人物模板 `references/skill-template.md` 带"我是XX"的角色扮演指令，自我模板必须显式禁用；任何后续生成的 self SKILL.md 不得复制该模板的语气

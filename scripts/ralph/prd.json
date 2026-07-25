@@ -1,0 +1,404 @@
+{
+  "project": "hedj-factory 本地个人知识资产蒸馏",
+  "branchName": "ralph/local-knowledge-self-distillation",
+  "description": "为 Nuwa 新增大型本地知识目录的 self-local-corpus 蒸馏模式，生成精简运行时 profile 与可追溯 assets。Ralph 由 Claude CLI 启动；当前 Claude settings 已配置本地 MiniMax provider，执行模型显示名为 MiniMax-M3。每个 story 必须在单次 context window 内完成并独立验证。",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "编写自我蒸馏工作流参考文档",
+      "description": "作为后续执行 agent，我需要一份自我蒸馏单一规范，以便不必从多个文件猜测来源分类、检查点和输出边界。",
+      "acceptanceCriteria": [
+        "创建非空文件 skills/nuwa-skill/references/self-distill-workflow.md",
+        "文档明确列出 authored、private-evidence、adapted、external、excluded 五类来源",
+        "文档明确列出 source policy 确认点、六个自我研究维度、阅读预算、版本优先级、资产证据门槛、隐私脱敏和全量重跑语义",
+        "文档明确区分精简 SKILL.md、assets/ 公开资产层、references/ 私有证据层",
+        "Command rg -n 'authored|private-evidence|六个|阅读预算|隐私|assets/' skills/nuwa-skill/references/self-distill-workflow.md returns matches",
+        "If skills/nuwa-skill/SKILL.md or skills/nuwa-skill/references/extraction-framework.md is missing, set blocked=true and record the missing path in notes; do not invent replacement rules",
+        "Typecheck passes (this Markdown-only story uses git diff --check -- skills/nuwa-skill/references/self-distill-workflow.md)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-002",
+      "title": "编写自我 profile 运行时模板",
+      "description": "作为内容工作流用户，我需要一个不包含公众人物角色扮演语义的自我 profile 模板，以便下游稳定读取我的定位、判断和表达规则。",
+      "acceptanceCriteria": [
+        "创建非空文件 skills/nuwa-skill/references/self-profile-template.md",
+        "模板 frontmatter 包含 profile_type: self",
+        "模板包含章节：定位与受众、核心心智模型、决策启发式、表达DNA、内容品味与评分标准、价值观与反模式、诚实边界",
+        "模板明确写出不得编造用户经历，并且不包含直接扮演公众人物的指令",
+        "模板包含指向 assets/index.md 及其他按需资产页面的链接约定",
+        "模板声明目标长度 3,000-6,000 estimated tokens，原始证据保留在 references/",
+        "Command rg -n '^## (定位与受众|核心心智模型|决策启发式|表达DNA|内容品味与评分标准|价值观与反模式|诚实边界)' skills/nuwa-skill/references/self-profile-template.md returns seven headings",
+        "If US-001 has not passed, set blocked=true and record dependency US-001 in notes",
+        "Typecheck passes (this Markdown-only story uses git diff --check -- skills/nuwa-skill/references/self-profile-template.md)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-003",
+      "title": "实现 inventory CLI 参数和路径防护",
+      "description": "作为用户，我需要一个拒绝非法路径且支持 dry-run 的 inventory CLI，以便盘点不会意外写入来源目录。",
+      "acceptanceCriteria": [
+        "创建 skills/nuwa-skill/scripts/inventory_local_corpus.py 和 tests/test_nuwa_local_corpus.py",
+        "CLI 支持 source_root、--profile-dir、--policy、--max-file-bytes 2000000 和 --check",
+        "source_root 不存在或不是目录时打印具体路径并以非零退出码结束",
+        "非 --check 模式缺少 --profile-dir，或 profile-dir 位于 source_root 内部时，以非零退出码结束且不写文件",
+        "--check 模式允许省略 --profile-dir，并且运行后不创建任何文件",
+        "脚本仅导入 Python 标准库",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.LocalCorpusInputValidationTests -v",
+        "If Python 3 or the target source file is unavailable, set blocked=true and record the exact command or path in notes",
+        "Typecheck passes (python3 -c 'import ast; ast.parse(open(\"skills/nuwa-skill/scripts/inventory_local_corpus.py\", encoding=\"utf-8\").read())')"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-004",
+      "title": "实现确定性遍历和文件资格判定",
+      "description": "作为用户，我需要稳定的文件遍历和明确的文本资格结果，以便每次盘点得到相同顺序和可解释的排除原因。",
+      "acceptanceCriteria": [
+        "inventory 按相对路径排序处理非隐藏常规文件，默认不跟随 symlink",
+        "语义合格扩展名仅包括 .md、.markdown、.txt、.json、.jsonl、.html、.htm、.yaml、.yml、.csv",
+        "二进制或未知格式只计数且标记 ineligible，不解析正文",
+        "超过 --max-file-bytes 的文件标记 ineligible，并记录 exclusion_reason=oversized 或等价稳定值",
+        "基础记录包含 relative_path、extension、size_bytes、mtime、top_level_family、eligible、policy_class、exclusion_reason",
+        "inventory 阶段不提取标题、摘要、聊天内容或其他语义正文",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.LocalCorpusTraversalTests -v",
+        "If US-003 has not passed, set blocked=true and record dependency US-003 in notes",
+        "Typecheck passes (Python AST parsing succeeds for inventory_local_corpus.py and tests/test_nuwa_local_corpus.py)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-005",
+      "title": "生成无 policy 的 manifest 和 inventory review",
+      "description": "作为用户，我希望首次盘点只生成未分类证据，以便来源归属必须经过女娲建议和人工确认。",
+      "acceptanceCriteria": [
+        "无 --policy 且非 --check 时写入 <profile-dir>/references/source-manifest.json",
+        "无 --policy 且非 --check 时写入 <profile-dir>/references/research/00-source-inventory.md",
+        "manifest 中所有文件的 policy_class 均为 unclassified，并包含 can_distill=false 或等价阻塞字段",
+        "CLI 不自动生成已生效的 source-policy.json，也不猜测 authored/private/external 归属",
+        "绝对 source_root 只允许出现在私有 manifest；inventory review 不包含源文件正文",
+        "源目录文件的 SHA-256 集合在命令前后保持一致，且 profile 内不存在源文件副本",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.LocalCorpusOutputTests -v",
+        "If US-004 has not passed, set blocked=true and record dependency US-004 in notes",
+        "Typecheck passes (Python AST parsing succeeds and python3 -m json.tool can parse the generated fixture manifest)"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-006",
+      "title": "实现 source policy 校验和有序匹配",
+      "description": "作为用户，我需要显式 policy 决定每个文件的归属，以便未确认来源不能进入语义蒸馏。",
+      "acceptanceCriteria": [
+        "source-policy.json schema 要求 schema_version=1 和非空 rules 数组，每条 rule 包含 class 与非空 globs",
+        "允许的 class 仅为 authored、private-evidence、adapted、external、excluded",
+        "规则按 JSON 文件顺序执行，first match wins",
+        "未匹配文件保持 unclassified，manifest 标记 can_distill=false，review 显示 unmatched 数量",
+        "全部 eligible 文件已分类后 manifest 标记 can_distill=true；excluded 文件不计入语义读取预算",
+        "非法 JSON、非法 class、空 glob 或缺字段均以非零退出码结束，并且不覆盖上一次有效 manifest",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.SourcePolicyTests -v",
+        "If US-005 has not passed, set blocked=true and record dependency US-005 in notes",
+        "Typecheck passes (Python AST parsing succeeds and all policy fixture JSON files pass python3 -m json.tool)"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-007",
+      "title": "增加 SHA-256 重复分组",
+      "description": "作为用户，我希望完全相同的文件只占用一次语义阅读预算，以便大语料不会重复消耗上下文。",
+      "acceptanceCriteria": [
+        "每个常规文件记录 sha256；读取失败时记录稳定错误并以非零退出码结束，不静默跳过",
+        "相同 sha256 的文件获得同一个 deterministic duplicate_group",
+        "每个 duplicate_group 以相对路径字典序最小的 eligible 文件作为 representative",
+        "非 representative 文件标记 semantic_read=false 或等价字段",
+        "inventory review 输出重复文件总数、重复组数，不输出文件正文",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.DuplicateDetectionTests -v",
+        "If US-006 has not passed, set blocked=true and record dependency US-006 in notes",
+        "Typecheck passes (Python AST parsing succeeds for changed Python files)"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-008",
+      "title": "增加版本序列 current 判定",
+      "description": "作为用户，我希望版本草稿有唯一 current 版本，以便旧稿只作为观点演化证据而不是重复主张。",
+      "acceptanceCriteria": [
+        "识别文件名中的大小写不敏感 vN 或 vN.N 数字版本标记，例如 v0.1、v0.2、v1",
+        "同一父目录、相同去版本基础名和相同扩展名组成一个 version_group",
+        "按数字 tuple 比较版本，最高版本标记 current_version=true，其余标记 evolution_only=true",
+        "没有版本标记的文件不被错误分组",
+        "inventory review 显示 version_group 数量和 current 相对路径，不输出正文",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.VersionSelectionTests -v",
+        "If US-007 has not passed, set blocked=true and record dependency US-007 in notes",
+        "Typecheck passes (Python AST parsing succeeds for changed Python files)"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-009",
+      "title": "扩展 merge_research.py 的 self 模式",
+      "description": "作为实施者，我需要用自我研究维度汇总来源，同时保持公众人物默认行为不变。",
+      "acceptanceCriteria": [
+        "merge_research.py 支持 --mode person|self，未传 --mode 时保持现有 person 行为",
+        "person 模式继续使用著作、对话、表达、他者、决策、时间线六个标签",
+        "self 模式使用 positioning、core-theses、decisions-and-behavior、systems-and-cases、expression-dna、tensions-and-evolution 六个标签",
+        "self 模式从研究文件 sources frontmatter 或等价明确列表读取相对路径，并结合 source-manifest.json 统计来源 class",
+        "self 模式不要求 URL；同一相对路径只计一次证据",
+        "现有 person fixture 输出与修改前保存的 golden output 一致",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.MergeResearchCompatibilityTests -v",
+        "If scripts/nuwa-skill/scripts/merge_research.py is missing or US-006 has not passed, set blocked=true and record the exact blocker in notes",
+        "Typecheck passes (Python AST parsing succeeds for merge_research.py and its tests)"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-010",
+      "title": "扩展 quality_check.py 的 self 结构检查",
+      "description": "作为用户，我需要在 profile 被下游读取前验证必需章节、资产入口和体量，以便不完整 profile 不能 false-green。",
+      "acceptanceCriteria": [
+        "quality_check.py 接受 profile 目录或 SKILL.md 路径，并通过 frontmatter profile_type: self 识别 self 模式",
+        "self 模式要求章节：定位与受众、核心心智模型、决策启发式、表达DNA、内容品味与评分标准、价值观与反模式、诚实边界",
+        "self 模式要求 assets/index.md 存在，并验证 SKILL.md 至少包含一个指向 assets/ 的相对链接",
+        "estimated_tokens 使用 CJK 字符数 + ceil(非 CJK 字符数 / 4)；高于 6000 退出非零，低于 3000 只警告",
+        "person 模式现有检查和退出码保持兼容",
+        "失败输出明确列出缺失章节、缺失文件或超限估算值",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.QualityStructureTests -v",
+        "If US-002 or US-009 has not passed, set blocked=true and record dependencies in notes",
+        "Typecheck passes (Python AST parsing succeeds for quality_check.py and its tests)"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-011",
+      "title": "增加 self profile 公开面隐私扫描",
+      "description": "作为用户，我需要质量门拒绝明显的聊天标识和凭据，以便私有来源不会进入运行时 profile 或可发布资产。",
+      "acceptanceCriteria": [
+        "隐私扫描只检查 SKILL.md 与 assets/*.md，不扫描 references/source-manifest.json 和 references/research/",
+        "至少检测规则 CREDENTIAL_ASSIGNMENT、WECHAT_ID、CHATROOM_ID、PRIVATE_IPV4，并在代码中使用稳定 rule id",
+        "检测到问题时只输出 rule id、相对文件和行号，不回显凭据或完整敏感值",
+        "干净 fixture 退出码 0；包含明显假 wxid_、@chatroom、token assignment 或 RFC1918 IPv4 的 fixture 退出非零",
+        "仅在 private manifest 路径或来源 family 中出现 chatlog/微信字样不会误报",
+        "Tests pass: python3 -m unittest tests.test_nuwa_local_corpus.PrivacyGateTests -v",
+        "If US-010 has not passed, set blocked=true and record dependency US-010 in notes",
+        "Typecheck passes (Python AST parsing succeeds for quality_check.py and privacy tests)"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-012",
+      "title": "在 Nuwa 中增加 self-local-corpus 路由",
+      "description": "作为用户，当我要求蒸馏自己并提供目录时，我希望 Nuwa 进入本地目录流程，而不是复制式公众人物语料流程。",
+      "acceptanceCriteria": [
+        "skills/nuwa-skill/SKILL.md 包含明确分支名 self-local-corpus",
+        "触发条件同时要求蒸馏用户自己和提供本地目录；仅蒸馏公众人物不进入该分支",
+        "独立自我蒸馏由 Nuwa 处理；只有完整 onboarding 或后续爆款工厂链路才由 baokuan 总入口编排",
+        "路由顺序明确为 inventory 无 policy、Nuwa 提出 source-policy.json 草稿、用户确认、inventory --policy 重跑、can_distill=true 后进入语义阶段",
+        "分支默认纯本地，不经用户要求不浏览网络，不复制或移动 source_root 文件",
+        "分支引用 references/self-distill-workflow.md、references/self-profile-template.md 和 scripts/inventory_local_corpus.py",
+        "Command python3 -c 'from pathlib import Path; t=Path(\"skills/nuwa-skill/SKILL.md\").read_text(); assert \"self-local-corpus\" in t and \"inventory_local_corpus.py\" in t and \"self-profile-template.md\" in t' succeeds",
+        "If US-001 through US-011 are not all passed, set blocked=true and list missing dependencies in notes",
+        "Typecheck passes (this Markdown story uses git diff --check -- skills/nuwa-skill/SKILL.md)"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-013",
+      "title": "定义 Nuwa 自我蒸馏预算和资产输出契约",
+      "description": "作为内容创作者，我希望 Nuwa 只读取高价值且已确认的素材，并输出可追溯资产，以便大目录不会退化成全量摘要。",
+      "acceptanceCriteria": [
+        "Nuwa 文档写明每轮 authored 总量不超过 20MB，超出时显式分批",
+        "private-evidence 默认优先 summaries/analysis，单轮不超过 100 文件或 5MB，且禁止引用原始聊天正文",
+        "adapted 单轮最多 30 文件；external 首轮排除，仅用于核实或对照个人主张",
+        "六个研究输出文件固定为 01-positioning.md、02-core-theses.md、03-decisions-and-behavior.md、04-systems-and-cases.md、05-expression-dna.md、06-tensions-and-evolution.md",
+        "资产卡要求 origin、evidence、visibility、confidence、sources；external-only 不得登记为个人资产",
+        "repeated 或 validated 至少需要两个 owned 来源，或一个 owned 来源加一个真实决策或案例",
+        "输出目录约定包含 SKILL.md、八个 assets 页面、source-policy.json、source-manifest.json 和七个 research 文件",
+        "文档说明精简 SKILL.md 默认加载、assets 按需加载、私有 raw 保持外部只读、本里程碑允许全量重跑",
+        "Command rg -n '20MB|100|5MB|external-only|repeated|validated|assets/index.md' skills/nuwa-skill/SKILL.md skills/nuwa-skill/references/self-distill-workflow.md returns all required concepts",
+        "If US-012 has not passed, set blocked=true and record dependency US-012 in notes",
+        "Typecheck passes (Markdown validation uses git diff --check for both Nuwa documents)"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-014",
+      "title": "更新 baokuan Phase O 的本地目录接入",
+      "description": "作为爆款工厂新用户，我希望 onboarding 可以接收本地知识目录，并把分析委托给 Nuwa。",
+      "acceptanceCriteria": [
+        "skills/baokuan-factory/SKILL.md Phase O 接受社交链接、单个文件或本地目录",
+        "本地目录请求显式委托 Nuwa self-local-corpus，baokuan 不读取或分类语料正文",
+        "新 profile 路径固定为 skills/<handle>-profile/SKILL.md，并作为写入 ~/.baokuan-factory/profile 的值",
+        "已有且有效的 skills/<handle>/SKILL.md marker 继续接受，不自动迁移或重命名",
+        "写 marker 前要求 quality_check.py 对 self profile 退出码 0；失败时停止且不覆盖旧 marker",
+        "Command rg -n '本地目录|<handle>-profile|self-local-corpus|quality_check.py' skills/baokuan-factory/SKILL.md returns matches",
+        "If US-012 or US-013 has not passed, set blocked=true and record dependencies in notes",
+        "Typecheck passes (this Markdown story uses git diff --check -- skills/baokuan-factory/SKILL.md)"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-015",
+      "title": "更新 README 和 SOP",
+      "description": "作为使用者，我需要公开文档准确说明目录型自我蒸馏、双层输出和隐私边界，以便不会误以为系统会阅读或复制全部文件。",
+      "acceptanceCriteria": [
+        "README.md 说明用户可用本地知识目录进行自我蒸馏，并生成精简 SKILL.md 与按需 assets/",
+        "docs/SOP.md 在线 A 中说明 inventory、policy 确认、六维蒸馏和 quality gate 顺序",
+        "README.md 与 docs/SOP.md 均说明新 profile 使用 skills/<handle>-profile/ 且旧 profile 兼容",
+        "文档明确 raw 不复制、不修改，外部归档不自动成为个人原创资产，私有聊天只允许脱敏抽象",
+        "文档不得声明每个文件都会被语义读取",
+        "Command rg -n '本地目录|source-policy|assets/|不复制|外部' README.md docs/SOP.md returns expected matches",
+        "If US-014 has not passed, set blocked=true and record dependency US-014 in notes",
+        "Typecheck passes (Markdown validation uses git diff --check -- README.md docs/SOP.md)"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-016",
+      "title": "更新 baokuan 触发评测样本",
+      "description": "作为维护者，我需要正负路由样本区分完整 onboarding 和独立 Nuwa 蒸馏，以便总入口不吞掉单步请求。",
+      "acceptanceCriteria": [
+        ".optimize/trigger-evals.json 增加至少一条 should_trigger=true：用户明确要求完整 onboarding 并提供本地知识目录",
+        ".optimize/trigger-evals.json 增加至少一条 should_trigger=false：仅要求蒸馏自己并提供本地目录",
+        ".optimize/trigger-evals.json 增加至少一条 should_trigger=false：蒸馏公众人物",
+        "python3 -m json.tool .optimize/trigger-evals.json succeeds",
+        "本 story 不运行 .optimize/bkf_eval.py，不改写已安装 skill，不消耗外部模型 quota",
+        "If US-014 has not passed or trigger-evals.json is missing, set blocked=true and record the exact blocker in notes",
+        "Typecheck passes (JSON validation uses python3 -m json.tool and git diff --check -- .optimize/trigger-evals.json)"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-017",
+      "title": "补齐合成语料端到端测试",
+      "description": "作为执行 agent，我需要用无真实隐私的临时语料跑通两次 inventory 和质量门，以便证明脚本链路不是只通过静态检查。",
+      "acceptanceCriteria": [
+        "tests/fixtures/nuwa-self-distill/ 仅包含合成原创笔记、私有摘要、改编笔记、外部文章、精确重复、版本序列和明显假的隐私污染样例",
+        "测试先无 policy 运行 inventory，断言全部 eligible 文件为 unclassified 且 can_distill=false",
+        "测试写入 policy 后重跑，断言 first-match 分类、can_distill=true、duplicate representative 和 current version 符合预期",
+        "测试比较源树前后 SHA-256，断言零修改；profile 目录内不存在源文件正文副本",
+        "干净 self profile 通过 quality_check.py；隐私污染 profile 退出非零且错误不回显完整敏感值",
+        "person merge/quality golden fixture 继续通过",
+        "Tests pass: python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v",
+        "If US-003 through US-016 are not all passed, set blocked=true and list missing dependencies in notes",
+        "Typecheck passes (Python AST parsing succeeds for every skills/nuwa-skill/scripts/*.py and tests/test_nuwa_local_corpus.py)"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-018",
+      "title": "执行真实知识库只读规模验收",
+      "description": "作为用户，我需要确认 13,000+ 文件真实目录可以在限定时间内只读盘点，以便合成测试之外还有真实规模证据。",
+      "acceptanceCriteria": [
+        "运行 python3 skills/nuwa-skill/scripts/inventory_local_corpus.py /Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw --check 并获得退出码 0",
+        "输出包含 total_files、eligible_files、skipped_by_extension、duplicate_groups、elapsed_seconds 或语义等价字段",
+        "total_files 大于或等于 13000，elapsed_seconds 小于或等于 120",
+        "命令前后对来源树生成的 SHA-256 清单完全一致",
+        "命令不创建 skills/<handle>-profile/、source-manifest.json、source-policy.json 或其他 profile 产物",
+        "stdout/stderr 不包含源文件正文、wxid_、@chatroom 或检测到的凭据值",
+        "If the real source path is missing or unreadable, set blocked=true and record the exact path error; do not replace this acceptance with synthetic data",
+        "Typecheck passes (the repository-equivalent check is successful Python AST parsing plus the read-only CLI exit code 0)"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-019",
+      "title": "执行最终闭环与回归验证",
+      "description": "作为用户，我需要读取完整验证证据，确认目录盘点、policy、self profile、assets、baokuan 契约和公众人物回归全部成立。",
+      "acceptanceCriteria": [
+        "US-001 through US-018 are all passes=true before this story begins",
+        "A synthetic skills/test-user-profile/ contains SKILL.md, eight required assets pages, source-policy.json, source-manifest.json, and seven research files",
+        "quality_check.py on the synthetic self profile exits 0 and its SKILL.md contains all baokuan-required sections plus relative assets links",
+        "At least one synthetic asset card contains origin、evidence、visibility、confidence、sources with only relative source paths",
+        "The existing person-mode merge and quality fixtures pass with no changed expected behavior",
+        "git diff --check succeeds",
+        "python3 -c 'import ast,pathlib; [ast.parse(p.read_text(encoding=",
+        "utf-8\")) for p in pathlib.Path(\"skills/nuwa-skill/scripts\").glob(\"*.py",
+        " succeeds\",\n        \"python3 -m unittest discover -s tests -p ",
+        "test_nuwa_*.py' -v succeeds",
+        "python3 -m json.tool .optimize/trigger-evals.json succeeds",
+        "git status --short is reviewed and does not include generated personal profile, cookies, credentials, media, logs, or unrelated AGENTS.md/scripts changes in this feature scope",
+        "No install、sync、publish、commit、push、pull、merge、rebase、reset or external model-quota command is executed by this validation story",
+        "If any prior story is unresolved or any validation command fails, leave passes=false and record the exact command output summary in notes",
+        "Typecheck passes (for this repository, all Markdown/JSON/Python validation commands above succeed)"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    }
+  ]
+}
