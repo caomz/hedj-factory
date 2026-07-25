@@ -10,6 +10,8 @@
 - inventory 的 record 字段顺序是 manifest 的事实契约：US-006 仅在 `_build_manifest` 内引入 `can_distill` / `unmatched_count` 计算，不修改 record 字段集合；US-007+ 增加 sha256/duplicate_group/version_group/semantic_read 时同样保持 record 键名稳定
 - `_glob_matches` 实现 `**/`（零或多层目录）与 `**`（任意字符）语义；`fnmatch.fnmatch` 与 `pathlib.PurePath.match` 都不直接支持 `**/`，不要在 story 中临时替换
 - duplicate_group 用 sha256 字符串作为稳定标识；representative 以 eligible 文件中 relative_path 字典序最小者为准；reading budget 只对 semantic_read=true 的 representative 计数
+- 版本序列字段顺序：US-008 在 record 中新增 `version_group` / `current_version` / `evolution_only`；version_group 形如 `{parent_dir}/{base_name}v{highest}{ext}`（或 root-level 时去掉前缀），与 duplicate_group 一样是「跨字段稳定字符串」；sorted 时必须用「数字 tuple + relative_path」复合 key，避免 V10 < V2 的字典序误判
+- inventory review 在 重复文件 段之后追加 版本序列 段（version_groups + current_version 路径 + 注释），保持 markdown 列表格式 `- \`path\`` 不变，让 Nuwa 后续 story 可直接 rg 提取
 
 ---
 
@@ -114,3 +116,20 @@
   - assign_duplicate_groups 直接修改传入的 records 列表，apply_source_policy 用 dict(record) 复制，因此 policy 改写后 duplicate_group 与 semantic_read 自动透传；US-008+ 接入版本序列时也保持「在原 records 上改字段」的模式，不要把 records 替换成新对象
   - chmod(0) 在 Unix 普通用户下能可靠触发 OSError；root 用户下需要换成 macOS chflags 隐藏或临时挪走来测试失败路径，US-008+ 不要再写「靠 root 拒绝」断言
   - profile-dir 必须在 source_root 之外：DuplicateDetectionTests 第一次失败是误把 profile 放在 source_dir 内部，触发 is_within 防护；后续 review / manifest 写入测试统一用 tempfile.mkdtemp 在 work_dir 下平级放置 source_root 与 profile_dir
+
+## 2026-07-25 19:50 - US-008
+- 在 inventory_local_corpus.py 中新增 `_VERSION_PATTERN`（大小写不敏感 `v\d+(?:\.\d+)*`）、`_strip_version`（最后一次匹配，去版本基础名 + tuple）、`_version_group_key`（parent_dir + base + ext 三元组）；新增 `assign_version_groups` 与 `count_version_summary`；每条 record 新增 `version_group` / `current_version` / `evolution_only` 三字段；sorted 用「数字 tuple + relative_path」复合 key，确保 V10 > V2；group_id 形如 `{parent_dir}/{base}v{highest}{ext}`，ineligible 文件不分组，无版本标记文件 version_group=None
+- `_build_manifest` 把三个新字段写入 manifest files[]；`_write_inventory_review` 在「重复文件」与「未匹配文件」之间新增「## 版本序列」段，列出 `version_groups` 计数 + `current_version` 相对路径清单；review 仍不出现源文件正文
+- 新增 VersionSelectionTests 5 例：v0.1/v0.2/v1 当前版本、case-insensitive 与数字 tuple 比较（V10 > V2）、无版本标记文件不参与分组、`assign_version_groups` 幂等、review 列出 version_groups 与 current 路径
+- 同步更新 LocalCorpusTraversalTests 与 LocalCorpusOutputTests 旧 record/manifest 字段集合断言（加入 version_group / current_version / evolution_only 三个新键）
+- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（32 OK，包括旧 27 + 新 5）；AST 解析通过；git diff --check 通过；CLI 端到端合成 5 文件（v0.1/v0.2/V10 + unversioned + external），manifest 中 V10 current_version=true，三个版本同 group，review 显示 version_groups: 1 与 `notes/plan-V10.md`
+- 提交：2cedc85 feat: US-008 - 增加版本序列 current 判定
+- 同步更新：scripts/ralph/prd.json 中 US-008 passes=true
+- **未来迭代的学习：**
+  - `re.IGNORECASE` + `\d+(?:\.\d+)*` 已经能正确捕获 `v0.1`/`V10`/`v0.2.3`；后续若要支持字母数字版本（如 `v1a`），需要扩展 pattern 同时调整 tuple 比较语义，不要默默把字符串混进数字 tuple
+  - `_strip_version` 用 `finditer` 的最后一个 match，比 `re.sub` 更稳，避免把同一 stem 中多个匹配全替换导致基础名漂移；后续任何「最后一次匹配」逻辑都遵循该模式
+  - `assign_version_groups` 必须复用 `inventory_local_corpus` 已 sorted 的 records；不要在内部再 `records.sort(...)`，否则与 duplicate_group 的 representative 选取顺序耦合，会引入非确定行为
+  - 「数字 tuple 比较」必须经 `_strip_version` 二次拆解（不要直接 `_VERSION_PATTERN.fullmatch(stem)`，因为 fullmatch 只接受整个 token）；在 lambda key 中调用 `_strip_version` 比单独写 `parse_version_token` 更不易踩坑
+  - review 输出遵循已有 markdown 段顺序（摘要 → family 计数 → class 计数 → 重复 → 版本序列 → 未匹配），后续如果新增「外部归档」或「owner family」段，必须插在版本序列之后、未匹配之前，避免 Nuwa 后续 story 的 rg 索引偏移
+  - version_group 的字符串形式含 parent_dir；root-level 文件（如 `notes-v1.md`）会被归入空 parent_dir，下游 story 若需 root-level 友好分组，可考虑把 parent_dir 为空时统一填 `.`，但本里程碑先保持原样，避免与 `top_level_family = "."` 约定冲突

@@ -162,7 +162,7 @@
         "Typecheck passes (Python AST parsing succeeds for changed Python files)"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
