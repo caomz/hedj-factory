@@ -1215,5 +1215,385 @@ class MergeResearchCompatibilityTests(unittest.TestCase):
         self.assertNotIn("│ 著作", result.stdout)
 
 
+class QualityStructureTests(unittest.TestCase):
+    """覆盖 US-010：quality_check.py self 模式契约。"""
+
+    QUALITY_SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "quality_check.py"
+
+    def _run_cli(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.QUALITY_SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def _write_self_profile(self, root: Path, *, missing_sections=(), omit_assets_index=False,
+                             assets_link_text="[定位](../assets/positioning.md)",
+                             zh_chars: int = 3500) -> None:
+        """合成一个 self profile 目录。"""
+        profile = root / "test-user-profile"
+        profile.mkdir()
+        (profile / "assets").mkdir()
+        if not omit_assets_index:
+            (profile / "assets" / "index.md").write_text("# index", encoding="utf-8")
+        sections = [
+            "定位与受众",
+            "核心心智模型",
+            "决策启发式",
+            "表达DNA",
+            "内容品味与评分标准",
+            "价值观与反模式",
+            "诚实边界",
+        ]
+        kept = [s for s in sections if s not in missing_sections]
+        body_lines = ["---", "profile_type: self", "---", "", "# Self Profile", ""]
+        for section in kept:
+            body_lines.append(f"## {section}")
+            body_lines.append("")
+            body_lines.append(assets_link_text)
+            body_lines.append("")
+        body_lines.append("中" * zh_chars)
+        (profile / "SKILL.md").write_text("\n".join(body_lines), encoding="utf-8")
+        return profile
+
+    def test_self_clean_profile_passes(self):
+        """干净 self profile 退出码 0，列出五个硬性检查。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(root)
+            result = self._run_cli(str(profile))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("self 模式契约", result.stdout)
+        self.assertIn("七个必需章节", result.stdout)
+        self.assertIn("assets/index.md 存在", result.stdout)
+        self.assertIn("assets/ 相对链接", result.stdout)
+        self.assertIn("token 预算", result.stdout)
+        self.assertIn("公开面隐私扫描", result.stdout)
+        self.assertIn("5/5 通过", result.stdout)
+
+    def test_self_missing_sections_lists_all_missing(self):
+        """缺失章节时退出非零，错误信息列出每个缺失章节名。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(
+                root, missing_sections=("核心心智模型", "表达DNA", "诚实边界")
+            )
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("缺失章节", result.stderr + result.stdout)
+        for section in ("核心心智模型", "表达DNA", "诚实边界"):
+            self.assertIn(section, result.stdout)
+
+    def test_self_missing_assets_index_fails(self):
+        """assets/index.md 缺失时退出非零。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(root, omit_assets_index=True)
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("assets/index.md", result.stdout)
+
+    def test_self_missing_assets_link_fails(self):
+        """SKILL.md 不含 assets/ 相对链接时退出非零。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(root, assets_link_text="无任何链接")
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("assets/", result.stdout)
+
+    def test_self_token_budget_over_6000_fails(self):
+        """估算 token > 6000 时退出非零并打印估算值。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(root, zh_chars=6500)
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("> 6000", result.stdout)
+
+    def test_self_token_budget_under_3000_warns_but_passes(self):
+        """估算 token < 3000 时仅警告，不阻塞（退出码 0）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(root, zh_chars=500)
+            result = self._run_cli(str(profile))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("警告", result.stdout)
+
+    def test_self_mode_accepts_skill_md_path_argument(self):
+        """quality_check.py 接受 SKILL.md 路径作为 target，与 profile 目录等价。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(root)
+            skill_path = profile / "SKILL.md"
+            result = self._run_cli(str(skill_path))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("self 模式契约", result.stdout)
+
+    def test_explicit_mode_overrides_autodetect(self):
+        """显式 --mode 覆盖 frontmatter 自动检测。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = root / "fake-self"
+            profile.mkdir()
+            (profile / "assets").mkdir()
+            (profile / "assets" / "index.md").write_text("# index", encoding="utf-8")
+            # profile_type 是 self，但 --mode person 应该走 person 路径
+            # （SKILL.md 没有完整 7 章节，person 检查可能失败；只验证显式模式确实覆盖）。
+            (profile / "SKILL.md").write_text(
+                "---\nprofile_type: self\n---\n# x\n" + "中" * 3500, encoding="utf-8"
+            )
+            result = self._run_cli(str(profile), "--mode", "person")
+
+        # person 模式在缺心智模型时会失败；但关键是不能出现 self 模式才有的章节标题输出。
+        self.assertIn("person 模式契约", result.stdout)
+        self.assertNotIn("七个必需章节", result.stdout)
+
+    def test_person_profile_keeps_backward_compatible_exit_codes(self):
+        """person profile 走旧版六项检查，退出码契约不变（全过=0，多项不过=1）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = root / "legacy-person"
+            profile.mkdir()
+            # 完整 person fixture：6 个心智模型、表达 DNA、诚实边界、张力、来源比例。
+            body = ["# Person", ""]
+            for index in range(5):
+                body.append(f"### 模型 {index + 1}")
+                body.append("一句话 + 局限性")
+                body.append("")
+            body.append("## 表达DNA")
+            body.append("句式词汇语气幽默节奏确定性引用口头禅")
+            body.append("")
+            body.append("## 诚实边界")
+            body.append("- 不 A")
+            body.append("- 不 B")
+            body.append("- 不 C")
+            body.append("")
+            body.append("张力 tension paradox 矛盾 一方面...另一方面")
+            body.append("")
+            body.append("## 调研来源")
+            body.append("一手资料 primary 原始")
+            (profile / "SKILL.md").write_text("\n".join(body), encoding="utf-8")
+            result = self._run_cli(str(profile))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("person 模式契约", result.stdout)
+        self.assertIn("心智模型数量", result.stdout)
+
+    def test_self_profile_via_frontmatter_detection(self):
+        """未传 --mode 时，根据 SKILL.md frontmatter 自动识别 self。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._write_self_profile(root)
+            result = self._run_cli(str(profile))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("detected=self", result.stdout)
+        self.assertIn("mode=self", result.stdout)
+
+
+class PrivacyGateTests(unittest.TestCase):
+    """覆盖 US-011：公开面隐私扫描（SKILL.md + assets/*.md）。"""
+
+    QUALITY_SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "quality_check.py"
+
+    def _run_cli(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.QUALITY_SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @staticmethod
+    def _seed_clean_profile(root: Path) -> Path:
+        profile = root / "privacy-profile"
+        profile.mkdir()
+        (profile / "assets").mkdir()
+        (profile / "assets" / "index.md").write_text("# index\n", encoding="utf-8")
+        (profile / "assets" / "positioning.md").write_text(
+            "# positioning\n\nno sensitive content here.\n",
+            encoding="utf-8",
+        )
+        sections = [
+            "定位与受众",
+            "核心心智模型",
+            "决策启发式",
+            "表达DNA",
+            "内容品味与评分标准",
+            "价值观与反模式",
+            "诚实边界",
+        ]
+        body_lines = ["---", "profile_type: self", "---", "", "# Self Profile", ""]
+        for section in sections:
+            body_lines.append(f"## {section}")
+            body_lines.append("")
+            body_lines.append("[定位](../assets/positioning.md)")
+            body_lines.append("")
+        body_lines.append("中" * 3500)
+        (profile / "SKILL.md").write_text("\n".join(body_lines), encoding="utf-8")
+        return profile
+
+    def test_clean_self_profile_passes_privacy_scan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            result = self._run_cli(str(profile))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("公开面隐私扫描", result.stdout)
+        self.assertIn("通过", result.stdout)
+
+    def test_wechat_id_in_skill_md_fails_with_stable_rule_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            skill_md = profile / "SKILL.md"
+            text = skill_md.read_text(encoding="utf-8")
+            text = text.replace(
+                "# Self Profile",
+                "# Self Profile\n\nsynthetic contact wxid_fakeabc123\n",
+                1,
+            )
+            skill_md.write_text(text, encoding="utf-8")
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stdout + result.stderr
+        self.assertIn("WECHAT_ID", combined)
+        self.assertIn("SKILL.md", combined)
+        # 隐私契约：完整 wxid_ 串不能回显到 stdout/stderr。
+        self.assertNotIn("wxid_fakeabc123", combined)
+
+    def test_chatroom_id_in_assets_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            (profile / "assets" / "team.md").write_text(
+                "# team\n\nsynthetic @chatroom secret\n",
+                encoding="utf-8",
+            )
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stdout + result.stderr
+        self.assertIn("CHATROOM_ID", combined)
+        self.assertIn("assets/team.md", combined)
+
+    def test_credential_assignment_in_skill_md_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            skill_md = profile / "SKILL.md"
+            text = skill_md.read_text(encoding="utf-8")
+            text = text.replace(
+                "# Self Profile",
+                "# Self Profile\n\ntoken = FAKEFAKEFAKEFAKE\n",
+                1,
+            )
+            skill_md.write_text(text, encoding="utf-8")
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stdout + result.stderr
+        self.assertIn("CREDENTIAL_ASSIGNMENT", combined)
+        self.assertNotIn("FAKEFAKEFAKEFAKE", combined)
+
+    def test_private_ipv4_in_assets_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            (profile / "assets" / "ops.md").write_text(
+                "# ops\n\nconnect to 10.0.0.5 internally\n",
+                encoding="utf-8",
+            )
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stdout + result.stderr
+        self.assertIn("PRIVATE_IPV4", combined)
+        self.assertIn("assets/ops.md", combined)
+
+    def test_public_ipv4_in_assets_does_not_fail(self):
+        """公网 IPv4 不应被标记为 RFC1918。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            (profile / "assets" / "ops.md").write_text(
+                "# ops\n\npublic endpoint 8.8.8.8 reachable\n",
+                encoding="utf-8",
+            )
+            result = self._run_cli(str(profile))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("公开面隐私扫描", result.stdout)
+
+    def test_references_directory_is_not_scanned(self):
+        """references/source-manifest.json 与 references/research/ 含聊天标识也不应误报。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            references = profile / "references"
+            references.mkdir()
+            (references / "source-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "files": [
+                            {
+                                "relative_path": "chatlog/2024-q1.md",
+                                "policy_class": "private-evidence",
+                                "eligible": True,
+                                "notes": "微信 / wxid_fake_secret @chatroom",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            research_dir = references / "research"
+            research_dir.mkdir()
+            (research_dir / "01-positioning.md").write_text(
+                "synthetic wxid_fake_secret @chatroom 10.0.0.7 token=fake1234abcd\n",
+                encoding="utf-8",
+            )
+            result = self._run_cli(str(profile))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("公开面隐私扫描通过", result.stdout)
+
+    def test_findings_include_relative_path_and_line_number(self):
+        """findings 必须包含 rule id + 相对路径 + 行号。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = self._seed_clean_profile(root)
+            skill_md = profile / "SKILL.md"
+            text = skill_md.read_text(encoding="utf-8")
+            text = text.replace(
+                "# Self Profile",
+                "# Self Profile\n\nline1\nline2 with wxid_fakealpha5678\n",
+                1,
+            )
+            skill_md.write_text(text, encoding="utf-8")
+            result = self._run_cli(str(profile))
+
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stdout + result.stderr
+        self.assertIn("WECHAT_ID", combined)
+        self.assertIn("SKILL.md:", combined)
+        # 行号必须是整数；粗略断言有数字。
+        import re as _re
+
+        self.assertRegex(combined, _re.compile(r"SKILL\.md:\d+"))
+
+
 if __name__ == "__main__":
     unittest.main()
