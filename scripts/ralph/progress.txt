@@ -237,3 +237,14 @@
   - `skills/<handle>-profile/` 与旧 `skills/<handle>/` 兼容是产品决策(US-014 锁定),README + SOP + 一句话 SOP 三个地方要同步把 path 改过来,不要只动 README 让 SOP 留旧路径;否则 US-016 触发评测看 SOP 时会以为新约定不存在
   - docs/SOP.md 在"线 A 详"新增子节时,Markdown 列表项用 `**本地目录**` 加粗加 `1.` 编号 list,保留 1./2./3./4. 顺序,US-019 闭环可以用 rg `^\d\. ` 抽回四步硬顺序,无需再解析自然语言
   - 本 milestone 文档更新是"复用现有口径"而不是"重新设计",所以本 story 的 diff 几乎全是新增段落,没有删改;后续 US-016/US-017/US-019 看到 README/SOP diff 偏大不要惊讶,这是契约向团队公开化的预期形态
+
+## 2026-07-25 22:30 - US-016
+- 在 `.optimize/trigger-evals.json` 末尾追加 3 条样本：1 条 should_trigger=true（新人 onboarding + `/Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw` 本地知识目录），1 条 should_trigger=false（仅"蒸馏我自己"+本地目录，要求走 nuwa-skill `self-local-corpus` 流程）、1 条 should_trigger=false（蒸馏纳瓦尔，模仿他思维做投资决策）
+- 总样本数 20 → 23（true 10 → 11 / false 10 → 12），三条样本显式区分「完整 onboarding + 本地目录」「self-only + 本地目录」「公众人物蒸馏」三种路由边界
+- 改动文件：.optimize/trigger-evals.json、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：`python3 -m json.tool .optimize/trigger-evals.json` 退出码 0（JSON 合法）；`git diff --check -- .optimize/trigger-evals.json` 通过；样本计数 23、true 含本地知识目录 1 条、false 含 `/Volumes/` + self-only 1 条、false 含「蒸馏…人」2 条；未运行 bkf_eval.py、未改写已安装 skill、未消耗外部 model quota
+- **未来迭代的学习：**
+  - baokuan 三入口（社交链接 / 单个文件 / 本地目录）的边界已在 US-014 SKILL.md 锁死：触发评测样本必须显式区分「提供本地目录 + 走完整 onboarding」(true) 与「提供本地目录 + 仅蒸馏自己」(false)，否则 baokuan 会吞掉单步 Nuwa 请求；US-017/US-019 闭环可以直接复用这 3 条样本的措辞
+  - 「蒸馏公众人物」负样本用更口语化的人名（李尚龙 / 纳瓦尔）比纯抽象 query 更稳定命中负面，原因是 baokuan description 的负向排除句不会点名任何公众人物，但人名会让模型自然路由到 nuwa-skill 的 person 模式；US-019 闭环回归 trigger 评测时不要替换人名为占位符
+  - trigger-evals.json 不写「不预期触发」的策略性解释，只能写用户原始 query；本里程碑的策略已经写进 baokuan-factory SKILL.md description 和 .optimize/desc_v2.txt，trigger-evals.json 只是验证 description 在新 query 上仍稳定触发/不触发
+  - 「新人 onboarding + 本地目录」这条 true 样本的关键短语是「从零开始 onboarding：装 skill、用本地知识目录…蒸馏他自己，再搭整套翻拍流程」，必须同时含「onboarding + 本地目录 + 翻拍流程」三要素，少一个都可能被模型路由到 nuwa-skill 单步；后续如果 baokuan 描述再扩（如加直播），US-019 闭环回归前应先补一条对应的 true 样本

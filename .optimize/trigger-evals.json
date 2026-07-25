@@ -9,6 +9,7 @@
   {"query": "这条视频号我想整个搬成我的版本：拆解 + 剪个成片 + 全平台标题文案，一条龙搞定", "should_trigger": true},
   {"query": "set me up end to end on the remake pipeline, distill my own voice first then i'll start remaking competitor videos", "should_trigger": true},
   {"query": "我对标的这个号 https://www.xiaohongshu.com/user/xxxx 我要照着它的爆款逻辑产出我自己风格的成片和文案，帮我把流程跑起来", "should_trigger": true},
+  {"query": "我们组新来了一位做爆款的同事，要帮他从零开始 onboarding：装 skill、用本地知识目录 /Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw 蒸馏他自己，再搭整套翻拍流程", "should_trigger": true},
   {"query": "把这个 mp4 的字幕用 whisper 提取出来，我只要 srt 文件", "should_trigger": false},
   {"query": "蒸馏一下李尚龙这个人，我想要一个能模仿他思维方式的顾问 skill", "should_trigger": false},
   {"query": "帮我拆解这条爆款的叙事结构，分析它为什么火，我先研究研究不急着翻", "should_trigger": false},
@@ -18,5 +19,7 @@
   {"query": "帮我把这份产品 PPT 转成一个带旁白的宣传视频", "should_trigger": false},
   {"query": "写一篇小红书种草文案，主题是一款国产护肤精华，要带 emoji 和收藏引导", "should_trigger": false},
   {"query": "蒸馏我自己拿去当我的私人决策顾问，我不做视频，就想要个能学我思维的 skill", "should_trigger": false},
-  {"query": "把这三条对标视频都做成案例库里的拆解文档，我要研究它们的钩子套路", "should_trigger": false}
+  {"query": "把这三条对标视频都做成案例库里的拆解文档，我要研究它们的钩子套路", "should_trigger": false},
+  {"query": "我想蒸馏我自己，本地知识目录在 /Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw，先按 nuwa-skill 的 self-local-corpus 流程跑一次就行，先不接翻拍链路", "should_trigger": false},
+  {"query": "把纳瓦尔这个人蒸馏成一个 skill，我要模仿他的思维来辅助我做投资决策", "should_trigger": false}
 ]
