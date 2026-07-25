@@ -9,6 +9,7 @@
 - source-policy.json 字段名 `schema_version` / `rules[].class` / `rules[].globs` 与合法 class 枚举（authored/private-evidence/adapted/external/excluded）由 US-006 锁定；后续 quality_check / merge_research / US-013 文档引用时必须复用同一名称与顺序，class 集合不得新增
 - inventory 的 record 字段顺序是 manifest 的事实契约：US-006 仅在 `_build_manifest` 内引入 `can_distill` / `unmatched_count` 计算，不修改 record 字段集合；US-007+ 增加 sha256/duplicate_group/version_group/semantic_read 时同样保持 record 键名稳定
 - `_glob_matches` 实现 `**/`（零或多层目录）与 `**`（任意字符）语义；`fnmatch.fnmatch` 与 `pathlib.PurePath.match` 都不直接支持 `**/`，不要在 story 中临时替换
+- duplicate_group 用 sha256 字符串作为稳定标识；representative 以 eligible 文件中 relative_path 字典序最小者为准；reading budget 只对 semantic_read=true 的 representative 计数
 
 ---
 
@@ -97,3 +98,19 @@
   - `_glob_matches` 用 regex 而非 fnmatch/PurePath.match，是为支持 `**/`；任何后续 policy 编辑工具或 GUI 必须复用同一定义，否则会出现「policy 写 `.md` 但 inventory 不命中」的 silent mismatch
   - inventory review 末尾 `## 未匹配文件` 的相对路径是 Nuwa 提 Checkpoint A policy 草稿的输入；当前实现每条都以 `- \`path\`` 列出，US-009 merge_research / quality_check 不要重新解析，只 rg `\`- 即可
   - US-006 的 test_cli_accepts_policy_and_custom_max_file_bytes 改成「提供合法 policy」后，未来如果再次收紧 policy 校验（如要求 rules 至少覆盖 N 个 family），同样要同步更新这个 smoke test，不能只补新测试
+
+## 2026-07-25 11:36 - US-007
+- 在 inventory_local_corpus.py 中新增 SHA-256 计算（_compute_sha256, 64KB chunked read）与 deterministic 重复分组（assign_duplicate_groups / count_duplicate_summary）；每条 record 新增 sha256 / duplicate_group / semantic_read 字段；按 relative_path 字典序最小者作 representative，其余 semantic_read=false；阅读失败抛 InventoryError，不静默跳过
+- _build_manifest 把三个新字段写入 files[]；_write_inventory_review 新增「## 重复文件」段输出 duplicate_files / duplicate_groups 与语义说明；review 仍只统计与 family 摘要，不出现源文件正文
+- 新增 DuplicateDetectionTests 7 例：精确重复共享 group + representative 字典序最小、sort 后稳定性、每条 record 都有 64 字符 SHA-256、chmod(0) 读取失败抛 InventoryError、review 输出 dup 统计且不含源文件正文、apply_source_policy 后 duplicate_group 保持、_compute_sha256 直读小文件
+- 同步更新 LocalCorpusTraversalTests 与 LocalCorpusOutputTests 旧字段集合断言（加入 sha256 / duplicate_group / semantic_read 三个新键）
+- 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（27 OK，包括旧 20 + 新 7）；AST 解析；git diff --check 通过；CLI 端到端在合成 3 文件（其中两份精确重复）上输出 manifest 含 sha256/duplicate_group/semantic_read 字段、review 含 duplicate_files=1, duplicate_groups=1、不含源文件正文
+- 提交：TBD feat: US-007 - 增加 SHA-256 重复分组
+- 同步更新：scripts/ralph/prd.json 中 US-007 passes=true
+- **未来迭代的学习：**
+  - record 字段集合是 manifest 契约：US-007 新增 sha256/duplicate_group/semantic_read 三个键必须与 US-006 八个键共存；US-008/后续 story 再加 version_group 时继续延展键集，不得删键或原地改类型
+  - 重复分组以 sha256 字符串本身作为 duplicate_group 的稳定标识（first match wins 之外再加一次 SHA 哈希），下游 Nukwa quality check 与 reading budget 不需要再解析嵌套结构；如未来要切换为短 hash，必须同步更新 review 段
+  - assign_duplicate_groups 直接修改传入的 records 列表，apply_source_policy 用 dict(record) 复制，因此 policy 改写后 duplicate_group 与 semantic_read 自动透传；US-008+ 接入版本序列时也保持「在原 records 上改字段」的模式，不要把 records 替换成新对象
+  - chmod(0) 在 Unix 普通用户下能可靠触发 OSError；root 用户下需要换成 macOS chflags 隐藏或临时挪走来测试失败路径，US-008+ 不要再写「靠 root 拒绝」断言
+  - profile-dir 必须在 source_root 之外：DuplicateDetectionTests 第一次失败是误把 profile 放在 source_dir 内部，触发 is_within 防护；后续 review / manifest 写入测试统一用 tempfile.mkdtemp 在 work_dir 下平级放置 source_root 与 profile_dir

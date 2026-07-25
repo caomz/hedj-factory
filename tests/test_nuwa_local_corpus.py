@@ -15,10 +15,13 @@ SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "inventory_local_corp
 sys.path.insert(0, str(SCRIPT.parent))
 from inventory_local_corpus import (
     apply_source_policy,
+    assign_duplicate_groups,
+    count_duplicate_summary,
     inventory_local_corpus,
     load_source_policy,
     summarize_inventory,
     write_manifest_and_review,
+    _compute_sha256,
 )
 
 
@@ -151,6 +154,9 @@ class LocalCorpusTraversalTests(unittest.TestCase):
                 "eligible",
                 "policy_class",
                 "exclusion_reason",
+                "sha256",
+                "duplicate_group",
+                "semantic_read",
             },
         )
 
@@ -321,6 +327,9 @@ class LocalCorpusOutputTests(unittest.TestCase):
                         "eligible",
                         "policy_class",
                         "exclusion_reason",
+                        "sha256",
+                        "duplicate_group",
+                        "semantic_read",
                     },
                 )
 
@@ -657,6 +666,171 @@ class SourcePolicyTests(unittest.TestCase):
         self.assertIn("`unclassified`", review_text)
         self.assertIn("`credentials.txt`", review_text)
         self.assertIn("can_distill: False", review_text)
+
+class DuplicateDetectionTests(unittest.TestCase):
+    """覆盖 US-007：SHA-256 重复分组、representative 选取与失败保护。"""
+
+    @staticmethod
+    def _hash_tree(root: Path) -> dict:
+        payload: dict = {}
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and not path.is_symlink():
+                payload[path.relative_to(root).as_posix()] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest()
+                )
+        return payload
+
+    def test_exact_duplicates_share_group_with_lowest_representative(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            note = "exact duplicate content"
+            (source_root / "zeta.md").write_text(note, encoding="utf-8")
+            (source_root / "alpha.md").write_text(note, encoding="utf-8")
+            (source_root / "mid.md").write_text(note, encoding="utf-8")
+            (source_root / "unique.md").write_text("unique text", encoding="utf-8")
+
+            records = inventory_local_corpus(source_root)
+
+        by_path = {record["relative_path"]: record for record in records}
+        expected_sha = hashlib.sha256(note.encode("utf-8")).hexdigest()
+
+        self.assertEqual(by_path["alpha.md"]["sha256"], expected_sha)
+        self.assertEqual(by_path["zeta.md"]["sha256"], expected_sha)
+        self.assertEqual(by_path["mid.md"]["sha256"], expected_sha)
+        self.assertNotEqual(by_path["unique.md"]["sha256"], expected_sha)
+
+        self.assertEqual(by_path["alpha.md"]["duplicate_group"], expected_sha)
+        self.assertEqual(by_path["zeta.md"]["duplicate_group"], expected_sha)
+        self.assertEqual(by_path["mid.md"]["duplicate_group"], expected_sha)
+        self.assertIsNone(by_path["unique.md"]["duplicate_group"])
+
+        self.assertTrue(by_path["alpha.md"]["semantic_read"])
+        self.assertFalse(by_path["zeta.md"]["semantic_read"])
+        self.assertFalse(by_path["mid.md"]["semantic_read"])
+        self.assertTrue(by_path["unique.md"]["semantic_read"])
+
+        summary = count_duplicate_summary(records)
+        self.assertEqual(summary["duplicate_files"], 2)
+        self.assertEqual(summary["duplicate_groups"], 1)
+
+    def test_duplicate_group_is_deterministic_after_sorting(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            payload = "identical content"
+            (source_root / "b.md").write_text(payload, encoding="utf-8")
+            (source_root / "a.md").write_text(payload, encoding="utf-8")
+
+            records = inventory_local_corpus(source_root)
+
+        sha = records[0]["sha256"]
+        self.assertEqual(records[0]["relative_path"], "a.md")
+        self.assertEqual(records[0]["duplicate_group"], sha)
+        self.assertTrue(records[0]["semantic_read"])
+        self.assertEqual(records[1]["relative_path"], "b.md")
+        self.assertEqual(records[1]["duplicate_group"], sha)
+        self.assertFalse(records[1]["semantic_read"])
+
+    def test_sha256_is_computed_for_every_regular_file(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            (source_root / "a.md").write_text("hello", encoding="utf-8")
+            (source_root / "b.txt").write_text("world", encoding="utf-8")
+
+            records = inventory_local_corpus(source_root)
+            for record in records:
+                self.assertEqual(len(record["sha256"]), 64)
+                self.assertEqual(
+                    record["sha256"],
+                    hashlib.sha256(
+                        (source_root / record["relative_path"]).read_bytes()
+                    ).hexdigest(),
+                )
+
+    def test_sha256_read_failure_raises_inventory_error(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            target = source_root / "note.md"
+            target.write_text("payload", encoding="utf-8")
+            target.chmod(0)
+            try:
+                with self.assertRaises(Exception) as raised:
+                    inventory_local_corpus(source_root)
+            finally:
+                target.chmod(0o644)
+
+        self.assertIn("无法读取文件", str(raised.exception))
+        self.assertIn("note.md", str(raised.exception))
+
+    def test_review_includes_duplicate_counts_without_source_bodies(self):
+        work_dir = Path(tempfile.mkdtemp(prefix="nuwa_us007_"))
+        try:
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            payload = "duplicate body"
+            (source_root / "first.md").write_text(payload, encoding="utf-8")
+            (source_root / "second.md").write_text(payload, encoding="utf-8")
+            (source_root / "third.md").write_text(payload, encoding="utf-8")
+            (source_root / "unique.md").write_text("unique body", encoding="utf-8")
+
+            profile_dir = work_dir / "profile"
+            records = inventory_local_corpus(source_root)
+            summary = summarize_inventory(records)
+            write_manifest_and_review(
+                profile_dir, records, source_root, summary, 2_000_000
+            )
+
+            review_text = (
+                profile_dir / "references" / "research" / "00-source-inventory.md"
+            ).read_text(encoding="utf-8")
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+        self.assertIn("## 重复文件", review_text)
+        self.assertIn("duplicate_files: 2", review_text)
+        self.assertIn("duplicate_groups: 1", review_text)
+        for needle in ("duplicate body", "unique body"):
+            self.assertNotIn(needle, review_text)
+
+    def test_duplicate_group_survives_apply_source_policy(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            payload = "shared payload"
+            (source_root / "z.md").write_text(payload, encoding="utf-8")
+            (source_root / "a.md").write_text(payload, encoding="utf-8")
+            (source_root / "other.md").write_text("different", encoding="utf-8")
+
+            policy_payload = {
+                "schema_version": 1,
+                "rules": [{"class": "authored", "globs": ["**/*.md"]}],
+            }
+            policy_path = Path(source_dir) / "source-policy.json"
+            policy_path.write_text(
+                json.dumps(policy_payload), encoding="utf-8"
+            )
+
+            records = inventory_local_corpus(source_root)
+            loaded = load_source_policy(policy_path)
+            applied = apply_source_policy(records, loaded)
+
+        by_path = {record["relative_path"]: record for record in applied}
+        self.assertEqual(
+            by_path["a.md"]["duplicate_group"], by_path["z.md"]["duplicate_group"]
+        )
+        self.assertEqual(by_path["a.md"]["policy_class"], "authored")
+        self.assertEqual(by_path["z.md"]["policy_class"], "authored")
+        self.assertTrue(by_path["a.md"]["semantic_read"])
+        self.assertFalse(by_path["z.md"]["semantic_read"])
+        self.assertIsNone(by_path["other.md"]["duplicate_group"])
+
+    def test_compute_sha256_directly_for_small_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            note = Path(temp_dir) / "tiny.md"
+            note.write_text("tiny", encoding="utf-8")
+            expected = hashlib.sha256(b"tiny").hexdigest()
+            actual = _compute_sha256(note)
+
+        self.assertEqual(actual, expected)
+
 
 if __name__ == "__main__":
     unittest.main()

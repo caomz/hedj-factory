@@ -11,6 +11,7 @@ story 实现。
 
 import argparse
 import datetime as _datetime
+import hashlib
 import json
 import os
 import re
@@ -307,6 +308,87 @@ def _raise_walk_error(error: OSError) -> None:
     raise InventoryError(f"无法遍历目录: {path}: {error}")
 
 
+SHA256_READ_CHUNK = 65_536
+
+
+def _compute_sha256(path: Path) -> str:
+    """读取文件全文并计算 SHA-256；读取失败时抛 InventoryError。
+
+    读取失败以非零退出码结束，不静默跳过。
+    """
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as source_file:
+            while True:
+                chunk = source_file.read(SHA256_READ_CHUNK)
+                if not chunk:
+                    break
+                digest.update(chunk)
+    except OSError as exc:
+        raise InventoryError(f"无法读取文件: {path}: {exc}") from exc
+    return digest.hexdigest()
+
+
+def assign_duplicate_groups(records: Sequence[Dict[str, object]]) -> None:
+    """按 SHA-256 给每条 record 分配 deterministic duplicate_group 与语义读取标记。
+
+    契约：
+    - 同一 ``sha256`` 的所有文件共享 ``duplicate_group``（群组标识 == sha256 本身）。
+    - 每个非空 ``duplicate_group`` 以相对路径字典序最小的 eligible 文件作为
+      ``representative``，其它成员标记 ``semantic_read=false``。
+    - 没有重复的 eligible 文件 ``duplicate_group`` 仍为 sha256 字符串，
+      ``semantic_read=true``（因为它就是自己的 representative）。
+    - ineligible 文件共享 SHA 时同样被分组，但 ``semantic_read`` 保持原始
+      ``eligible`` 值（ineligible 文件不应被语义读取，不计入 dup 统计）。
+    - 直接修改传入 ``records`` 列表中每个 dict 的 ``duplicate_group`` 与
+      ``semantic_read`` 字段。
+    """
+    for record in records:
+        sha = record.get("sha256")
+        if not isinstance(sha, str) or not sha:
+            continue
+        same_sha = [other for other in records if other.get("sha256") == sha]
+        if len(same_sha) > 1:
+            record["duplicate_group"] = sha
+            eligible_members = sorted(
+                other["relative_path"]
+                for other in same_sha
+                if other.get("eligible")
+            )
+            if eligible_members and record.get("eligible"):
+                if record["relative_path"] == eligible_members[0]:
+                    record["semantic_read"] = True
+                else:
+                    record["semantic_read"] = False
+        else:
+            record["duplicate_group"] = None
+
+
+def count_duplicate_summary(
+    records: Sequence[Dict[str, object]],
+) -> Dict[str, int]:
+    """从 records 汇总重复文件总数与重复组数。"""
+    duplicates_total = 0
+    seen_groups: set = set()
+    duplicate_group_count = 0
+    for record in records:
+        sha = record.get("sha256")
+        if not isinstance(sha, str) or not sha:
+            continue
+        group = record.get("duplicate_group")
+        if not group:
+            continue
+        if sha not in seen_groups:
+            seen_groups.add(sha)
+            duplicate_group_count += 1
+            same_sha = [other for other in records if other.get("sha256") == sha]
+            duplicates_total += max(0, len(same_sha) - 1)
+    return {
+        "duplicate_files": duplicates_total,
+        "duplicate_groups": duplicate_group_count,
+    }
+
+
 def inventory_local_corpus(
     source_root: Path,
     max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
@@ -348,6 +430,7 @@ def inventory_local_corpus(
                 file_stat.st_size,
                 max_file_bytes,
             )
+            sha256 = _compute_sha256(path)
             records.append(
                 {
                     "relative_path": relative_path.as_posix(),
@@ -358,10 +441,14 @@ def inventory_local_corpus(
                     "eligible": eligible,
                     "policy_class": "unclassified",
                     "exclusion_reason": exclusion_reason,
+                    "sha256": sha256,
+                    "duplicate_group": None,
+                    "semantic_read": bool(eligible),
                 }
             )
 
     records.sort(key=lambda record: record["relative_path"])
+    assign_duplicate_groups(records)
     return records
 
 
@@ -513,6 +600,9 @@ def _build_manifest(
                 "eligible": record["eligible"],
                 "policy_class": record["policy_class"],
                 "exclusion_reason": record.get("exclusion_reason"),
+                "sha256": record.get("sha256"),
+                "duplicate_group": record.get("duplicate_group"),
+                "semantic_read": record.get("semantic_read", record["eligible"]),
             }
         )
 
@@ -576,6 +666,18 @@ def _write_inventory_review(
         f"- `{name}`: {count}" for name, count in sorted(class_counts.items())
     ) or "- (none)"
 
+    duplicate_summary = count_duplicate_summary(manifest["files"])  # type: ignore[arg-type]
+    duplicate_section = [
+        "## 重复文件",
+        "",
+        f"- duplicate_files: {duplicate_summary['duplicate_files']}",
+        f"- duplicate_groups: {duplicate_summary['duplicate_groups']}",
+        "- 注：相同 SHA-256 的文件归入同一 duplicate_group；"
+        "相对路径字典序最小的 eligible 文件作为 representative，其它成员标记 "
+        "`semantic_read=false`，不消耗阅读预算。",
+        "",
+    ]
+
     can_distill = manifest["can_distill"]  # type: ignore[index]
     status_note = (
         "- can_distill: True — 所有 eligible 文件均已分类，Nuwa 可进入六维研究。"
@@ -624,6 +726,7 @@ def _write_inventory_review(
         "",
         class_lines,
         "",
+        *duplicate_section,
         *unmatched_section,
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
