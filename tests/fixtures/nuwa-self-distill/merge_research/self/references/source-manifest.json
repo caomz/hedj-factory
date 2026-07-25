@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "files": [
+    {"relative_path": "notes/positioning-a.md", "policy_class": "authored", "eligible": true},
+    {"relative_path": "notes/positioning-b.md", "policy_class": "authored", "eligible": true},
+    {"relative_path": "external/blog.md", "policy_class": "external", "eligible": true},
+    {"relative_path": "summaries/private-a.md", "policy_class": "private-evidence", "eligible": true},
+    {"relative_path": "summaries/private-b.md", "policy_class": "private-evidence", "eligible": true}
+  ]
+}

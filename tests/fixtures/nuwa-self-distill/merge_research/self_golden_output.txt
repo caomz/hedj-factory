@@ -1,0 +1,16 @@
+┌──────────────┬──────────┬──────────────────────────┐
+│ Dimension    │ 来源数    │ 关键发现                  │
+├──────────────┼──────────┼──────────────────────────┤
+│ positioning  │ 3        │ 定位                       │
+│ core-theses  │ 2        │ 核心论点                     │
+│ decisions-and-behavior │ 2        │ 决策与行为                    │
+│ systems-and-cases │ 2        │ 系统与案例                    │
+│ expression-dna │ 1        │ 表达 DNA                   │
+│ tensions-and-evolution │ 2        │ 张力与演化                    │
+├──────────────┼──────────┼──────────────────────────┤
+│ 总来源(去重) │ 5        │ class: authored:8, exter │
+│ 矛盾点       │ 0处      │ —                        │
+│ 信息不足维度  │ 无       │ —                        │
+└──────────────┴──────────┴──────────────────────────┘
+
+class counts: authored=8, external=2, private-evidence=2

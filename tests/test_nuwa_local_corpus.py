@@ -995,5 +995,225 @@ class VersionSelectionTests(unittest.TestCase):
         self.assertNotIn("newest", review_text)
 
 
+class MergeResearchCompatibilityTests(unittest.TestCase):
+    """覆盖 US-009：merge_research.py self 模式 + person 模式向后兼容。"""
+
+    MERGE_SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "merge_research.py"
+    FIXTURES = REPO_ROOT / "tests" / "fixtures" / "nuwa-self-distill" / "merge_research"
+
+    def _run_cli(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.MERGE_SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_person_mode_matches_saved_golden_output(self):
+        """person 模式（含/不含 --mode person）输出与修改前一致。"""
+        golden_path = self.FIXTURES / "person_golden_output.txt"
+        golden = golden_path.read_text(encoding="utf-8")
+
+        without_mode = self._run_cli(str(self.FIXTURES / "person"))
+        with_mode = self._run_cli(str(self.FIXTURES / "person"), "--mode", "person")
+
+        self.assertEqual(without_mode.returncode, 0, without_mode.stderr)
+        self.assertEqual(with_mode.returncode, 0, with_mode.stderr)
+        self.assertEqual(without_mode.stdout.rstrip("\n"), golden.rstrip("\n"))
+        self.assertEqual(with_mode.stdout.rstrip("\n"), golden.rstrip("\n"))
+
+    def test_self_mode_uses_six_self_dimensions_and_dedupes_sources(self):
+        """self 模式用 6 个 self 标签，按相对源路径去重计数证据。"""
+        result = self._run_cli(str(self.FIXTURES / "self"), "--mode", "self")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        expected_dimensions = (
+            "positioning",
+            "core-theses",
+            "decisions-and-behavior",
+            "systems-and-cases",
+            "expression-dna",
+            "tensions-and-evolution",
+        )
+        for dimension in expected_dimensions:
+            self.assertIn(dimension, result.stdout)
+
+        # 不应再使用 person 模式的 6 标签。
+        for person_label in ("著作", "对话", "他者", "时间线"):
+            self.assertNotIn(person_label, result.stdout)
+
+        # 核心断言：每个维度的来源数与"总来源(去重)"稳定。
+        self.assertIn("│ positioning  │ 3", result.stdout)
+        self.assertIn("│ core-theses  │ 2", result.stdout)
+        self.assertIn("│ decisions-and-behavior │ 2", result.stdout)
+        self.assertIn("│ systems-and-cases │ 2", result.stdout)
+        self.assertIn("│ expression-dna │ 1", result.stdout)
+        self.assertIn("│ tensions-and-evolution │ 2", result.stdout)
+        # positioning-a 在 01/02/05/04 都引用过，去重后只算 1 次。
+        # 总来源去重后为 5：positioning-a / positioning-b / external/blog
+        # / summaries/private-a / summaries/private-b。
+        self.assertIn("│ 总来源(去重) │ 5", result.stdout)
+
+        # 输出与 golden fixture 文本等价（忽略尾换行差异）。
+        golden = (self.FIXTURES / "self_golden_output.txt").read_text(encoding="utf-8")
+        self.assertEqual(result.stdout.rstrip("\n"), golden.rstrip("\n"))
+
+    def test_self_mode_does_not_require_urls(self):
+        """self 模式不依赖 URL；研究文件正文可不含 https://。"""
+        dimensions = (
+            "core-theses",
+            "decisions-and-behavior",
+            "systems-and-cases",
+            "expression-dna",
+            "tensions-and-evolution",
+        )
+        with tempfile.TemporaryDirectory() as work_dir:
+            work = Path(work_dir)
+            research_dir = work / "references" / "research"
+            research_dir.mkdir(parents=True)
+
+            (research_dir / "01-positioning.md").write_text(
+                "---\nsources:\n  - notes/a.md\n  - notes/b.md\n---\n# 定位\n",
+                encoding="utf-8",
+            )
+            for index, dimension in enumerate(dimensions, start=2):
+                (research_dir / f"0{index}-{dimension}.md").write_text(
+                    f"---\nsources:\n  - notes/a.md\n---\n# {dimension}\n",
+                    encoding="utf-8",
+                )
+
+            result = self._run_cli(str(work), "--mode", "self")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("│ 总来源(去重) │ 2", result.stdout)
+        self.assertNotIn("⚠️ 总来源数", result.stdout)
+
+    def test_self_mode_combines_source_manifest_class_counts(self):
+        """self 模式按 manifest 的 policy_class 聚合来源。"""
+        with tempfile.TemporaryDirectory() as work_dir:
+            work = Path(work_dir)
+            research_dir = work / "references" / "research"
+            research_dir.mkdir(parents=True)
+            (work / "references" / "source-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "files": [
+                            {
+                                "relative_path": "notes/owned.md",
+                                "policy_class": "authored",
+                                "eligible": True,
+                            },
+                            {
+                                "relative_path": "external/ref.md",
+                                "policy_class": "external",
+                                "eligible": True,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            (research_dir / "01-positioning.md").write_text(
+                "---\nsources:\n  - notes/owned.md\n  - external/ref.md\n---\n",
+                encoding="utf-8",
+            )
+            for index, dimension in enumerate(
+                (
+                    "core-theses",
+                    "decisions-and-behavior",
+                    "systems-and-cases",
+                    "expression-dna",
+                    "tensions-and-evolution",
+                ),
+                start=2,
+            ):
+                (research_dir / f"0{index}-{dimension}.md").write_text(
+                    "---\nsources: []\n---\n",
+                    encoding="utf-8",
+                )
+
+            result = self._run_cli(str(work), "--mode", "self")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # class 计数显示在「总来源(去重)」行右侧 24 字符槽，可能被截断；
+        # 完整计数放在表格外。class counts: name=count。
+        self.assertIn("class counts: authored=1, external=1", result.stdout)
+
+    def test_self_mode_skips_class_count_when_manifest_missing(self):
+        """manifest 缺失时 self 模式仍能运行，但不输出 class 计数。"""
+        with tempfile.TemporaryDirectory() as work_dir:
+            work = Path(work_dir)
+            research_dir = work / "references" / "research"
+            research_dir.mkdir(parents=True)
+            (research_dir / "01-positioning.md").write_text(
+                "---\nsources:\n  - notes/a.md\n---\n", encoding="utf-8"
+            )
+            for index, dimension in enumerate(
+                (
+                    "core-theses",
+                    "decisions-and-behavior",
+                    "systems-and-cases",
+                    "expression-dna",
+                    "tensions-and-evolution",
+                ),
+                start=2,
+            ):
+                (research_dir / f"0{index}-{dimension}.md").write_text(
+                    "---\nsources:\n  - notes/a.md\n---\n", encoding="utf-8"
+                )
+
+            result = self._run_cli(str(work), "--mode", "self")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "未读取到 references/source-manifest.json", result.stderr
+        )
+        self.assertNotIn("class:", result.stdout)
+
+    def test_explicit_person_mode_overrides_self_auto_detection(self):
+        """SKILL.md frontmatter 标记 self 时，--mode person 显式覆盖自动检测。"""
+        with tempfile.TemporaryDirectory() as work_dir:
+            work = Path(work_dir)
+            (work / "SKILL.md").write_text(
+                "---\nprofile_type: self\n---\n", encoding="utf-8"
+            )
+            research_dir = work / "references" / "research"
+            research_dir.mkdir(parents=True)
+            for key in (
+                "01-writings",
+                "02-conversations",
+                "03-expression-dna",
+                "04-external-views",
+                "05-decisions",
+                "06-timeline",
+            ):
+                (research_dir / f"{key}.md").write_text(
+                    "https://example.com/a\n", encoding="utf-8"
+                )
+
+            auto_result = self._run_cli(str(work))
+            explicit_result = self._run_cli(str(work), "--mode", "person")
+
+        self.assertEqual(auto_result.returncode, 0, auto_result.stderr)
+        self.assertEqual(explicit_result.returncode, 0, explicit_result.stderr)
+        # SKILL.md 标 self 但研究文件是 person 文件名 → 自动检测走 self
+        # 时全部维度报告缺失。
+        self.assertIn("│ positioning  │ ❌ 缺失", auto_result.stdout)
+        # 显式 --mode person 覆盖自动检测，应走 person 路径。
+        self.assertIn("│ 著作", explicit_result.stdout)
+        self.assertNotIn("│ positioning", explicit_result.stdout)
+
+    def test_auto_detect_self_mode_via_profile_type_frontmatter(self):
+        """未传 --mode 且 SKILL.md 含 profile_type: self 时自动走 self。"""
+        result = self._run_cli(str(self.FIXTURES / "self"))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("│ positioning", result.stdout)
+        self.assertNotIn("│ 著作", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
