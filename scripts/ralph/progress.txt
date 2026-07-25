@@ -248,3 +248,19 @@
   - 「蒸馏公众人物」负样本用更口语化的人名（李尚龙 / 纳瓦尔）比纯抽象 query 更稳定命中负面，原因是 baokuan description 的负向排除句不会点名任何公众人物，但人名会让模型自然路由到 nuwa-skill 的 person 模式；US-019 闭环回归 trigger 评测时不要替换人名为占位符
   - trigger-evals.json 不写「不预期触发」的策略性解释，只能写用户原始 query；本里程碑的策略已经写进 baokuan-factory SKILL.md description 和 .optimize/desc_v2.txt，trigger-evals.json 只是验证 description 在新 query 上仍稳定触发/不触发
   - 「新人 onboarding + 本地目录」这条 true 样本的关键短语是「从零开始 onboarding：装 skill、用本地知识目录…蒸馏他自己，再搭整套翻拍流程」，必须同时含「onboarding + 本地目录 + 翻拍流程」三要素，少一个都可能被模型路由到 nuwa-skill 单步；后续如果 baokuan 描述再扩（如加直播），US-019 闭环回归前应先补一条对应的 true 样本
+
+## 2026-07-25 23:00 - US-017
+- 新增 `tests/fixtures/nuwa-self-distill/e2e/` 静态合成语料：12 个 md 文件 + 1 份 source-policy.json + 1 份 profile/SKILL.md 模板，覆盖原创/私有摘要/改编/外部/精确重复/版本序列/excluded 五类
+- 新增 `SelfDistillEndToEndTests`（6 例）：fixture 完整性（hash/SHA/版本/policy JSON schema）、无 policy 走盘（unclassified + can_distill=false + 源树零写入 + review 不含源正文）、带 policy 重跑（first-match wins → can_distill=true + duplicate representative + version current + excluded 单独集合）、clean/dirty self profile 经 quality_check（5/5 通过 / 失败不回显敏感值）、person merge golden fixture 无回归
+- 新增合成 profile 校验：profile 目录内 profile_text 必须不含 source_root 任意非标题/非"synthetic "行的内容（静态探针方法）
+- 改动文件：tests/test_nuwa_local_corpus.py（+260 行）、tests/fixtures/nuwa-self-distill/e2e/{source-policy.json, corpus/, profile/SKILL.md}、scripts/ralph/prd.json、scripts/ralph/progress.txt
+- 验证：python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v → 63 tests OK（旧 57 + 新 6）；AST 解析 OK；git diff --check OK；policy JSON / trigger-evals.json 都合法 JSON
+- 提交：af535bc feat: US-017 - 补齐合成语料端到端测试
+- **未来迭代的学习：**
+  - inventory.py 的 duplicate_group representative 由"字典序最小的 relative_path"决定，不等于 "源文件名 hero"：测试要按排序结果断言 representative，不要假设固定语义。本 fixture 中 "authored/note-alpha-copy.md" 字典序 < "authored/note-alpha.md"（"copy" 比 "alpha" 短，且 -c- 早于 -m- 出现位置），所以 -copy 是 representative
+  - 第一版写 `**/*.bak` 想测 excluded，但 `.bak` 不在 SUPPORTED_TEXT_EXTENSIONS 里，被先标记 ineligible 后 policy rule 无法触达；后续 US-019 闭环 / 任何"想测 excluded 实际起作用"的 fixture 都必须用 eligible 扩展名 + policy 显式 excluded 路径
+  - policy 的 first-match wins 顺序很关键：把 `excluded` 放第一行只对它想 match 的精确 glob 才生效；本 fixture 把 excluded 放 rule[0] 是因为 `authored/legacy.md` 会先匹配 `authored/**/*`，永远轮不到 excluded
+  - excluded 类文件不会自动让 `semantic_read=false`（`semantic_read` 由 duplicate_group 逻辑决定）；"excluded 不计入阅读预算"在当前实现里仅意味着它不进入 `DISTILLABLE_POLICY_CLASSES` 集合而非物理禁读。E2E 测试如果想断言"excluded 不被读"，要查 manifest 的 distillable_count 而不是逐文件 semantic_read
+  - macOS APFS firmlink 风险仍在：使用 subprocess.run 跑 inventory_cli 时，`profile_dir` 在 /Volumes/WorkSSD/Cache/tmp 上即时 is_file() 偶发不可见；本 E2E 类全部在 pytest 自己的 tempdir（默认 /var/folders/...）内建库，避免 firmlink 副作用
+  - 静态 fixture + 动态生成的合成 profile 混合策略是 US-017 的稳定形态：fixture 仅承载「源语料」角色，让多个测试方法反复复制到 tmpdir 再做端到端；profile 章节、token 数量、隐私样例等不稳定因素由 `_build_clean_self_profile(work_dir)` 在每个 case 内构造，不让 fixture 文件膨胀
+  - 后续 US-019 闭环要做"test-user-profile 含 8 个 assets + source-policy/manifest + 7 个 research"的全静态 profile 时，建议复用本 fixture 的 `tests/fixtures/nuwa-self-distill/test-user-profile/` 作为静态成品目录，不要再造一个新 fixture 类目

@@ -348,7 +348,7 @@
         "Typecheck passes (Python AST parsing succeeds for every skills/nuwa-skill/scripts/*.py and tests/test_nuwa_local_corpus.py)"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
