@@ -106,7 +106,7 @@
 - 同步更新 LocalCorpusTraversalTests 与 LocalCorpusOutputTests 旧字段集合断言（加入 sha256 / duplicate_group / semantic_read 三个新键）
 - 改动文件：skills/nuwa-skill/scripts/inventory_local_corpus.py、tests/test_nuwa_local_corpus.py、scripts/ralph/prd.json、scripts/ralph/progress.txt
 - 验证：python3 -m unittest tests.test_nuwa_local_corpus -v（27 OK，包括旧 20 + 新 7）；AST 解析；git diff --check 通过；CLI 端到端在合成 3 文件（其中两份精确重复）上输出 manifest 含 sha256/duplicate_group/semantic_read 字段、review 含 duplicate_files=1, duplicate_groups=1、不含源文件正文
-- 提交：TBD feat: US-007 - 增加 SHA-256 重复分组
+- 提交：9156e2d feat: US-007 - 增加 SHA-256 重复分组
 - 同步更新：scripts/ralph/prd.json 中 US-007 passes=true
 - **未来迭代的学习：**
   - record 字段集合是 manifest 契约：US-007 新增 sha256/duplicate_group/semantic_read 三个键必须与 US-006 八个键共存；US-008/后续 story 再加 version_group 时继续延展键集，不得删键或原地改类型
