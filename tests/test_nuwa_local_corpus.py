@@ -14,7 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "inventory_local_corpus.py"
 sys.path.insert(0, str(SCRIPT.parent))
 from inventory_local_corpus import (
+    apply_source_policy,
     inventory_local_corpus,
+    load_source_policy,
     summarize_inventory,
     write_manifest_and_review,
 )
@@ -91,6 +93,10 @@ class LocalCorpusInputValidationTests(unittest.TestCase):
             source_root = root / "corpus"
             source_root.mkdir()
             policy = root / "source-policy.json"
+            policy.write_text(
+                '{"schema_version": 1, "rules": [{"class": "authored", "globs": ["**/*.md"]}]}',
+                encoding="utf-8",
+            )
             result = self.run_cli(
                 source_root,
                 "--check",
@@ -359,6 +365,298 @@ class LocalCorpusOutputTests(unittest.TestCase):
 
         self.assertIn("已存在 inventory 产物", str(raised.exception))
         self.assertEqual(preserved_content, legacy_content)
+
+
+class SourcePolicyTests(unittest.TestCase):
+    """覆盖 US-006：source policy schema、first-match、can_distill 与失败保护。"""
+
+    @staticmethod
+    def _seed_corpus(root: Path) -> None:
+        (root / "notes").mkdir()
+        (root / "notes" / "first.md").write_text("first note", encoding="utf-8")
+        (root / "notes" / "second.txt").write_text("second note", encoding="utf-8")
+        (root / "external").mkdir()
+        (root / "external" / "blog.md").write_text("external blog", encoding="utf-8")
+        (root / "credentials.txt").write_text("wxid_fake_secret", encoding="utf-8")
+
+    @staticmethod
+    def _hash_tree(root: Path) -> dict:
+        payload: dict = {}
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                payload[path.relative_to(root).as_posix()] = (
+                    hashlib.sha256(path.read_bytes()).hexdigest()
+                )
+        return payload
+
+    def test_first_match_wins_and_unmatched_stays_unclassified(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            self._seed_corpus(source_root)
+
+            policy_path = work_dir / "source-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "rules": [
+                            {
+                                "class": "authored",
+                                "globs": ["notes/**/*.md", "notes/**/*.txt"],
+                            },
+                            {"class": "external", "globs": ["external/**/*"]},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = load_source_policy(policy_path)
+            self.assertEqual(loaded["schema_version"], 1)
+            records = inventory_local_corpus(source_root)
+            applied = apply_source_policy(records, loaded)
+            by_path = {entry["relative_path"]: entry for entry in applied}
+
+            self.assertEqual(
+                by_path["notes/first.md"]["policy_class"], "authored"
+            )
+            self.assertEqual(
+                by_path["notes/second.txt"]["policy_class"], "authored"
+            )
+            self.assertEqual(
+                by_path["external/blog.md"]["policy_class"], "external"
+            )
+            self.assertEqual(
+                by_path["credentials.txt"]["policy_class"], "unclassified"
+            )
+
+            summary = summarize_inventory(applied)
+            manifest_payload = write_manifest_and_review(
+                profile_dir=work_dir / "profile",
+                records=applied,
+                source_root=source_root,
+                summary=summary,
+                max_file_bytes=2_000_000,
+                policy=loaded,
+            )
+
+        self.assertFalse(manifest_payload["can_distill"])
+        self.assertEqual(manifest_payload["unmatched_count"], 1)
+
+    def test_full_policy_sets_can_distill_true_and_excluded_does_not_block(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            self._seed_corpus(source_root)
+            (source_root / "tokens").mkdir()
+            (source_root / "tokens" / "secret.bin").write_bytes(b"\x00bad")
+
+            policy_path = work_dir / "source-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "rules": [
+                            {
+                                "class": "authored",
+                                "globs": ["notes/**/*.md", "notes/**/*.txt"],
+                            },
+                            {"class": "external", "globs": ["external/**/*"]},
+                            {
+                                "class": "excluded",
+                                "globs": ["credentials.txt", "tokens/**/*"],
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = load_source_policy(policy_path)
+            records = inventory_local_corpus(source_root)
+            applied = apply_source_policy(records, loaded)
+            summary = summarize_inventory(applied)
+            manifest_payload = write_manifest_and_review(
+                profile_dir=work_dir / "profile",
+                records=applied,
+                source_root=source_root,
+                summary=summary,
+                max_file_bytes=2_000_000,
+                policy=loaded,
+            )
+
+        self.assertTrue(manifest_payload["can_distill"])
+        self.assertEqual(manifest_payload["unmatched_count"], 0)
+        by_path = {entry["relative_path"]: entry for entry in manifest_payload["files"]}
+        self.assertEqual(by_path["credentials.txt"]["policy_class"], "excluded")
+        self.assertEqual(by_path["tokens/secret.bin"]["policy_class"], "excluded")
+
+    def test_invalid_json_rejected_and_does_not_overwrite_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            self._seed_corpus(source_root)
+            profile_dir = work_dir / "profile"
+
+            existing_manifest = profile_dir / "references" / "source-manifest.json"
+            existing_manifest.parent.mkdir(parents=True)
+            existing_manifest.write_text(
+                '{"legacy": true, "can_distill": false}', encoding="utf-8"
+            )
+            legacy_content = existing_manifest.read_text(encoding="utf-8")
+
+            policy_path = work_dir / "source-policy.json"
+            policy_path.write_text("{ this is not json", encoding="utf-8")
+
+            with self.assertRaises(Exception) as raised:
+                load_source_policy(policy_path)
+
+            preserved = existing_manifest.read_text(encoding="utf-8")
+            self.assertFalse((profile_dir / "references" / "research").exists())
+
+        self.assertIn("合法 JSON", str(raised.exception))
+        self.assertEqual(preserved, legacy_content)
+
+    def test_invalid_class_rejected_with_clear_message(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            policy_path = work_dir / "source-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "rules": [
+                            {"class": "bogus", "globs": ["**/*.md"]},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(Exception) as raised:
+                load_source_policy(policy_path)
+
+        self.assertIn("rules[0].class", str(raised.exception))
+
+    def test_empty_globs_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            policy_path = work_dir / "source-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "rules": [{"class": "authored", "globs": []}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(Exception) as raised:
+                load_source_policy(policy_path)
+
+        self.assertIn("globs 必须为非空", str(raised.exception))
+
+    def test_invalid_policy_rejected_by_cli_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            self._seed_corpus(source_root)
+            profile_dir = work_dir / "profile"
+            existing_manifest = profile_dir / "references" / "source-manifest.json"
+            existing_manifest.parent.mkdir(parents=True)
+            existing_manifest.write_text(
+                '{"legacy": true}', encoding="utf-8"
+            )
+            legacy_content = existing_manifest.read_text(encoding="utf-8")
+
+            policy_path = work_dir / "source-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "rules": [{"class": "nope", "globs": ["**/*"]}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            before_hash = self._hash_tree(source_root)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    str(source_root),
+                    "--profile-dir",
+                    str(profile_dir),
+                    "--policy",
+                    str(policy_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            after_hash = self._hash_tree(source_root)
+            preserved = existing_manifest.read_text(encoding="utf-8")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("rules[0].class", result.stderr)
+        self.assertEqual(before_hash, after_hash)
+        self.assertEqual(preserved, legacy_content)
+
+    def test_review_includes_class_counts_and_unmatched_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            source_root = work_dir / "corpus"
+            source_root.mkdir()
+            self._seed_corpus(source_root)
+
+            policy_path = work_dir / "source-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "rules": [
+                            {
+                                "class": "authored",
+                                "globs": ["notes/**/*.md"],
+                            },
+                            {"class": "external", "globs": ["external/**/*"]},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = load_source_policy(policy_path)
+            records = inventory_local_corpus(source_root)
+            applied = apply_source_policy(records, loaded)
+            summary = summarize_inventory(applied)
+            profile_dir = work_dir / "profile"
+            write_manifest_and_review(
+                profile_dir=profile_dir,
+                records=applied,
+                source_root=source_root,
+                summary=summary,
+                max_file_bytes=2_000_000,
+                policy=loaded,
+            )
+
+            review_text = (
+                profile_dir / "references" / "research" / "00-source-inventory.md"
+            ).read_text(encoding="utf-8")
+
+        self.assertIn("## policy_class 计数", review_text)
+        self.assertIn("`authored`", review_text)
+        self.assertIn("`external`", review_text)
+        self.assertIn("`unclassified`", review_text)
+        self.assertIn("`credentials.txt`", review_text)
+        self.assertIn("can_distill: False", review_text)
 
 if __name__ == "__main__":
     unittest.main()

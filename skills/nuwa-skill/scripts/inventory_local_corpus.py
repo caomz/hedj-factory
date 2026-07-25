@@ -13,6 +13,7 @@ import argparse
 import datetime as _datetime
 import json
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -42,6 +43,14 @@ SUPPORTED_TEXT_EXTENSIONS = frozenset(
 )
 SEMANTIC_FIELDS = frozenset({"title", "summary", "content", "chat_content"})
 
+POLICY_SCHEMA_VERSION = 1
+VALID_POLICY_CLASSES = frozenset(
+    {"authored", "private-evidence", "adapted", "external", "excluded"}
+)
+DISTILLABLE_POLICY_CLASSES = frozenset(
+    {"authored", "private-evidence", "adapted", "external"}
+)
+
 
 class InputValidationError(ValueError):
     """命令行输入不满足只读与输出路径约束。"""
@@ -49,6 +58,10 @@ class InputValidationError(ValueError):
 
 class InventoryError(RuntimeError):
     """源目录无法被完整、确定地盘点。"""
+
+
+class SourcePolicyError(ValueError):
+    """source-policy.json 不满足 schema 或语义约束。"""
 
 
 def positive_int(value: str) -> int:
@@ -162,6 +175,132 @@ def top_level_family(relative_path: Path) -> str:
     return relative_path.parts[0]
 
 
+def load_source_policy(path: Path) -> Dict[str, object]:
+    """加载并校验 source-policy.json。
+
+    校验项：
+    - JSON 合法（``json.loads`` 不抛）
+    - 顶层为对象，且 ``schema_version == 1``
+    - ``rules`` 为非空数组
+    - 每条 rule 为对象，包含 ``class``（必须是 ``VALID_POLICY_CLASSES`` 之一）
+      与非空 ``globs`` 字符串数组
+    """
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SourcePolicyError(f"无法读取 source-policy.json: {path}: {exc}") from exc
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise SourcePolicyError(
+            f"source-policy.json 不是合法 JSON: {path}: {exc}"
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise SourcePolicyError(
+            f"source-policy.json 顶层必须是对象: {path}"
+        )
+
+    schema_version = payload.get("schema_version")
+    if schema_version != POLICY_SCHEMA_VERSION:
+        raise SourcePolicyError(
+            f"source-policy.json schema_version 必须为 "
+            f"{POLICY_SCHEMA_VERSION}: 实际 {schema_version!r}"
+        )
+
+    rules = payload.get("rules")
+    if not isinstance(rules, list) or not rules:
+        raise SourcePolicyError("source-policy.json rules 必须为非空数组")
+
+    normalized_rules: List[Dict[str, object]] = []
+    for index, rule in enumerate(rules):
+        if not isinstance(rule, dict):
+            raise SourcePolicyError(f"rules[{index}] 必须是对象")
+        class_name = rule.get("class")
+        if not isinstance(class_name, str) or class_name not in VALID_POLICY_CLASSES:
+            raise SourcePolicyError(
+                f"rules[{index}].class 必须是 {sorted(VALID_POLICY_CLASSES)}"
+                f" 之一: {class_name!r}"
+            )
+        globs = rule.get("globs")
+        if not isinstance(globs, list) or not globs:
+            raise SourcePolicyError(f"rules[{index}].globs 必须为非空数组")
+        for glob_index, glob_pattern in enumerate(globs):
+            if not isinstance(glob_pattern, str) or not glob_pattern:
+                raise SourcePolicyError(
+                    f"rules[{index}].globs[{glob_index}] 必须为非空字符串"
+                )
+        normalized_rules.append({"class": class_name, "globs": list(globs)})
+
+    return {
+        "schema_version": POLICY_SCHEMA_VERSION,
+        "rules": normalized_rules,
+    }
+
+
+def _glob_matches(relative_path: str, pattern: str) -> bool:
+    """glob 风格匹配，支持 ``**`` 表示跨目录通配。
+
+    规则：
+    - ``**/`` 表示零或多层目录（含末尾的 ``/``）；与 ``gitignore`` 的 ``**/``
+      语义一致，因此 ``**/*.md`` 能命中 ``notes/first.md``。
+    - 单独的 ``**`` 表示任意字符序列（含 ``/``）。
+    - 单个 ``*`` 与 ``?`` 不跨 ``/``，与 ``fnmatch`` 一致。
+    - 所有其它字符按字面匹配。
+    """
+    regex_parts: List[str] = []
+    index = 0
+    length = len(pattern)
+    while index < length:
+        if pattern.startswith("**/", index):
+            regex_parts.append("(?:.*/)?")
+            index += 3
+        elif pattern.startswith("**", index):
+            regex_parts.append(".*")
+            index += 2
+        elif pattern[index] == "*":
+            regex_parts.append("[^/]*")
+            index += 1
+        elif pattern[index] == "?":
+            regex_parts.append("[^/]")
+            index += 1
+        else:
+            regex_parts.append(re.escape(pattern[index]))
+            index += 1
+    regex = "^" + "".join(regex_parts) + "$"
+    return re.match(regex, relative_path) is not None
+
+
+def apply_source_policy(
+    records: Sequence[Dict[str, object]],
+    policy: Dict[str, object],
+) -> List[Dict[str, object]]:
+    """按 ``policy['rules']`` 的 JSON 文件顺序对每条 record 求值，first match wins。
+
+    - 命中规则后，``policy_class`` 被替换为规则 class。
+    - 未命中的 eligible 文件保持 ``policy_class='unclassified'``；
+      未命中的 ineligible 文件同样保持 ``policy_class='unclassified'``。
+    - 返回新列表；不修改传入的 ``records``。
+    """
+    rules = policy.get("rules", [])  # type: ignore[assignment]
+    applied: List[Dict[str, object]] = []
+    for record in records:
+        new_record = dict(record)
+        relative_path = record["relative_path"]  # type: ignore[index]
+        matched_class = None
+        for rule in rules:
+            globs = rule["globs"]  # type: ignore[index]
+            if any(_glob_matches(relative_path, pattern) for pattern in globs):  # type: ignore[arg-type]
+                matched_class = rule["class"]  # type: ignore[index]
+                break
+        if matched_class is None:
+            new_record["policy_class"] = "unclassified"
+        else:
+            new_record["policy_class"] = matched_class
+        applied.append(new_record)
+    return applied
+
+
 def _raise_walk_error(error: OSError) -> None:
     """把 os.walk 的异步错误转成不会被静默忽略的 inventory 错误。"""
     path = error.filename or "<unknown>"
@@ -267,6 +406,15 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         print(f"错误: {exc}", file=sys.stderr)
         return 2
 
+    policy: Optional[Dict[str, object]] = None
+    if args.policy is not None:
+        try:
+            policy = load_source_policy(args.policy.expanduser().resolve(strict=False))
+        except SourcePolicyError as exc:
+            print(f"错误: {exc}", file=sys.stderr)
+            return 2
+        records = apply_source_policy(records, policy)
+
     summary = summarize_inventory(records)
     mode = "check" if args.check else "inventory"
     fields = " ".join(f"{key}={value}" for key, value in summary.items())
@@ -275,7 +423,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         f"max_file_bytes={args.max_file_bytes} {fields}"
     )
 
-    if not args.check and args.policy is None and args.profile_dir is not None:
+    if not args.check and args.profile_dir is not None:
         try:
             write_manifest_and_review(
                 profile_dir=args.profile_dir.expanduser().resolve(strict=False),
@@ -283,6 +431,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                 source_root=source_root,
                 summary=summary,
                 max_file_bytes=args.max_file_bytes,
+                policy=policy,
             )
         except (InputValidationError, InventoryError, OSError) as exc:
             print(f"错误: {exc}", file=sys.stderr)
@@ -297,12 +446,17 @@ def write_manifest_and_review(
     source_root: Path,
     summary: Dict[str, int],
     max_file_bytes: int,
-) -> None:
-    """在无 policy 场景下把 manifest 与 inventory review 写入 profile。
+    policy: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
+    """把 manifest 与 inventory review 写入 profile。
 
     行为契约：
-    - 所有 eligible 文件保持 ``policy_class="unclassified"``，并在 manifest
-      顶层用 ``can_distill=False`` 阻塞后续语义阶段。
+    - ``policy`` 为 ``None`` 时：所有 eligible 文件保持
+      ``policy_class="unclassified"``，并在 manifest 顶层用
+      ``can_distill=False`` 阻塞后续语义阶段。
+    - ``policy`` 非空时：传入的 ``records`` 必须已经按 first-match wins 求值，
+      manifest 的 ``can_distill`` 仅在所有 eligible + 非 ``excluded`` 文件都进
+      入 ``DISTILLABLE_POLICY_CLASSES`` 时才为 ``True``；否则保持 ``False``。
     - 只写入 ``references/source-manifest.json`` 与
       ``references/research/00-source-inventory.md``；绝不写入
       ``source-policy.json`` 或其他 profile 产物。
@@ -331,6 +485,7 @@ def write_manifest_and_review(
     manifest = _build_manifest(records, source_root, summary, max_file_bytes)
     _write_json(manifest_path, manifest)
     _write_inventory_review(review_path, manifest, summary)
+    return manifest
 
 
 def _build_manifest(
@@ -339,7 +494,13 @@ def _build_manifest(
     summary: Dict[str, int],
     max_file_bytes: int,
 ) -> Dict[str, object]:
-    """构造无 policy 场景的 source manifest，保留稳定字段顺序。"""
+    """构造 source manifest，保留稳定字段顺序。
+
+    ``records`` 可以来自无 policy 场景（全部 ``policy_class="unclassified"``），
+    也可以来自 ``apply_source_policy`` 之后的产物。manifest 的 ``can_distill``
+    在且仅在**所有** eligible 文件都已经进入 ``DISTILLABLE_POLICY_CLASSES``
+    （即不是 ``unclassified`` 且不是 ``excluded``）时为 ``True``。
+    """
     file_entries: List[Dict[str, object]] = []
     for record in records:
         file_entries.append(
@@ -350,7 +511,7 @@ def _build_manifest(
                 "mtime": record["mtime"],
                 "top_level_family": record["top_level_family"],
                 "eligible": record["eligible"],
-                "policy_class": "unclassified",
+                "policy_class": record["policy_class"],
                 "exclusion_reason": record.get("exclusion_reason"),
             }
         )
@@ -360,6 +521,13 @@ def _build_manifest(
         for entry in file_entries
         if entry["eligible"] and entry["policy_class"] == "unclassified"
     )
+    distillable_count = sum(
+        1
+        for entry in file_entries
+        if entry["eligible"] and entry["policy_class"] in DISTILLABLE_POLICY_CLASSES
+    )
+    can_distill = unmatched_count == 0 and distillable_count > 0
+
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "generated_at": _datetime.datetime.now(tz=_datetime.timezone.utc)
@@ -367,7 +535,7 @@ def _build_manifest(
         .replace("+00:00", "Z"),
         "source_root": str(source_root),
         "max_file_bytes": max_file_bytes,
-        "can_distill": False,
+        "can_distill": can_distill,
         "unmatched_count": unmatched_count,
         "summary": dict(summary),
         "files": file_entries,
@@ -391,25 +559,54 @@ def _write_inventory_review(
 ) -> None:
     """生成不含源文件正文、只含统计与 family 摘要的 inventory review。"""
     family_counts: Dict[str, int] = {}
+    class_counts: Dict[str, int] = {}
+    unmatched_paths: List[str] = []
     for entry in manifest["files"]:  # type: ignore[index]
         family = entry["top_level_family"]  # type: ignore[index]
         family_counts[family] = family_counts.get(family, 0) + 1
+        class_name = entry["policy_class"]  # type: ignore[index]
+        class_counts[class_name] = class_counts.get(class_name, 0) + 1
+        if entry["eligible"] and class_name == "unclassified":  # type: ignore[index]
+            unmatched_paths.append(entry["relative_path"])  # type: ignore[index]
 
     family_lines = "\n".join(
         f"- `{name}`: {count}" for name, count in sorted(family_counts.items())
     ) or "- (none)"
+    class_lines = "\n".join(
+        f"- `{name}`: {count}" for name, count in sorted(class_counts.items())
+    ) or "- (none)"
+
+    can_distill = manifest["can_distill"]  # type: ignore[index]
+    status_note = (
+        "- can_distill: True — 所有 eligible 文件均已分类，Nuwa 可进入六维研究。"
+        if can_distill
+        else "- can_distill: False — 仍存在 `unclassified` eligible 文件；"
+        "Nuwa 必须补规则或请用户显式排除后重跑。"
+    )
+
+    unmatched_section = ["## 未匹配文件", ""]
+    if unmatched_paths:
+        unmatched_section.append(
+            f"- 共 {len(unmatched_paths)} 个 eligible 文件保持 `unclassified`："
+        )
+        unmatched_section.extend(
+            f"  - `{relative}`" for relative in unmatched_paths
+        )
+    else:
+        unmatched_section.append("- (无)")
+    unmatched_section.append("")
 
     lines = [
         "# Source Inventory Review",
         "",
-        "> 由 `inventory_local_corpus.py` 自动生成；所有文件 policy_class",
-        "> 均为 `unclassified`，Nuwa 必须在用户确认 policy 后才能进入语义阶段。",
+        "> 由 `inventory_local_corpus.py` 自动生成；分类按 `source-policy.json` "
+        "中的规则顺序求值（first-match wins），未匹配文件保持 `unclassified`。",
         "",
         "## 摘要",
         "",
         f"- source_root: `{manifest['source_root']}`",
         f"- generated_at: {manifest['generated_at']}",
-        f"- can_distill: {manifest['can_distill']}",
+        f"- can_distill: {can_distill}",
         f"- unmatched_count: {manifest['unmatched_count']}",
         f"- total_files: {summary['total_files']}",
         f"- eligible_files: {summary['eligible_files']}",
@@ -417,16 +614,17 @@ def _write_inventory_review(
         f"- skipped_by_extension: {summary['skipped_by_extension']}",
         f"- oversized_files: {summary['oversized_files']}",
         f"- binary_files: {summary['binary_files']}",
+        status_note,
         "",
         "## top_level_family 计数",
         "",
         family_lines,
         "",
-        "## 未匹配文件",
+        "## policy_class 计数",
         "",
-        f"- 共 {manifest['unmatched_count']} 个 eligible 文件保持 `unclassified`；",
-        "  Nuwa 必须在 Checkpoint A 提出 `source-policy.json` 草稿并经用户逐条确认。",
+        class_lines,
         "",
+        *unmatched_section,
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
 
