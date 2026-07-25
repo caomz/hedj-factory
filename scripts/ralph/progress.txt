@@ -180,3 +180,20 @@
   - PRIVATE_IPV4 用 ipaddress.IPv4Address 校验 `_is_private_ipv4` 才能正确区分公网/内网（避免 8.8.8.8 误报）；纯 regex 会把公网 IP 误报为内网，后续若引入 IPv6 规则必须同样走 ipaddress.IPv6Address，不要简单扩展 regex
   - scan_privacy_gate 只 glob `assets/*.md`，不递归子目录；这是与 quality_check 同级调用约定一致的简化策略，US-019 全量回归时若 `assets/` 出现子目录需要先在此扩 glob
   - 隐私扫描只走公开面（SKILL.md + assets/*.md），references/ 完全跳过；US-017 合成语料端到端测试在写「私有面命中」断言时必须严格把 fixture 放到 references/ 下，否则会变成 US-011 误报
+
+---
+
+## 2026-07-25 21:05 - US-012
+- 在 `skills/nuwa-skill/SKILL.md` 末尾「特殊场景 > 蒸馏用户自己」一节改造为路由分流：先判断「小素材」还是「提供本地目录」两种形态，仅「蒸馏自己 + 提供本地目录」进入 `self-local-corpus` 分支
+- 新增 `self-local-corpus` 子节：触发条件（含 4 条排除条件，即仅蒸馏公众人物/不要求自己/无目录/无 onboarding 都不进本分支）、9 步路由顺序（无 policy inventory → Nuwa 草稿 → 用户确认 → 带 policy 重跑 → Checkpoint C 预算 → 六维研究 → 资产 + SKILL.md → Checkpoint D 质量门 → 回写 profile 标记）、默认纯本地约束（不联网、不复制、不移动、第三方收藏 → 个人原创 IP 禁止）、与现有 references/scripts 的关系、内置 inline-check 校验命令
+- 所有引用走单一规范：`references/self-distill-workflow.md`（五类来源/四 checkpoint/阅读预算/资产卡/隐私扫描）、`references/self-profile-template.md`（七章节骨架）、`scripts/inventory_local_corpus.py`、`scripts/merge_research.py --mode self`、`scripts/quality_check.py`
+- 改动文件：`skills/nuwa-skill/SKILL.md`、`scripts/ralph/prd.json`、`scripts/ralph/progress.txt`
+- 验证：`python3 -c '...assert "self-local-corpus" in t and "inventory_local_corpus.py" in t and "self-profile-template.md" in t'` 通过；`git diff --check -- skills/nuwa-skill/SKILL.md` 通过；`python3 -m unittest discover -s tests -p 'test_nuwa_*.py' -v` 57 tests 全绿（含旧 49 + 隐私 8），person 模式无回归
+- **未来迭代的学习：**
+  - 「特殊场景 > 蒸馏用户自己」段本来已有 4 条说明，本 story 不是简单重写而是用「路由分流 + 小素材路径」结构兼容老语义，再加 self-local-corpus 新分支；后续 US-014 baokuan Phase O 接入时必须复用同一「分流」句式，避免与本节口径冲突
+  - 路由顺序 9 步的 Checkpoint A/B/C/D 名称直接抄 `references/self-distill-workflow.md` §3；SKILL.md 这里只复述流程 + 指向文档，不复制具体规则，避免单一规范被两处改动撕裂
+  - 触发条件里把「仅蒸馏公众人物」「不要求自己」「无目录」「无 onboarding」全部列出来，作为负向排除；US-013 文档/US-014 baokuan 在判断路由时要复用同一负向清单，保持团队对「什么时候不进 self-local-corpus」的语义一致
+  - SKILL.md 内置 US-012 inline-check（`assert "self-local-corpus" in t and "inventory_local_corpus.py" in t and "self-profile-template.md" in t`），任何后续对「蒸馏用户自己」段的修改必须维持这三个字符串同时出现；US-019 闭环回归可直接复用这条命令
+  - `references/research/0X-xxx.md` 命名在 person 模式是 `01-writings.md` … `06-timeline.md`、在 self 模式是 `01-positioning.md` … `06-tensions-and-evolution.md`；本段直接复述 self 六维文件名，避免 user 误以为可以套用 person 文件名
+  - 「第三方收藏 → 用户原创 IP」是禁止行为，在 SKILL.md 默认纯本地约束里重申一次；US-013 文档/US-017 闭环测试都要复用同一表述，避免后续把外部材料偷偷登记到 assets/
+

@@ -245,7 +245,7 @@
         "Typecheck passes (this Markdown story uses git diff --check -- skills/nuwa-skill/SKILL.md)"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false

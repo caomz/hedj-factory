@@ -628,12 +628,68 @@ Phase 4 验证通过后，自动启动双Agent精炼，进一步提升Skill可�
 3. 诚实边界section加大篇幅，明确列出「哪些维度信息不足」
 4. 如果用户能提供一手素材（书籍、内部录音、私信），优先使用
 
-### 蒸馏用户自己
-当用户说「蒸馏我自己」「帮我做一个我的skill」时：
+### 蒸馏用户自己（路由分流）
+
+当用户说「蒸馏我自己」「帮我做一个我的 skill」时，必须先判断走哪条分支：
+
+- **仅有少量素材**（几篇笔记 / 一两个文件）：属于「小素材」路径，仍按下方 4 条要点处理。
+- **提供了本地目录**（一个文件夹路径，含 ≥ 数十个候选文件）：进入 `self-local-corpus` 分支，按下方专门章节执行。
+- **未提供任何素材且未提供目录**：默认按 4 条要点追问，再决定是否建议本地目录流程。
+
+仅蒸馏公众人物（其他人名）不进入 `self-local-corpus` 分支；只有用户明确要求蒸馏「自己」**且**提供了本地目录时才走该分支。
+
+#### 小素材路径（无目录或目录里 < 几十个文件）
+
 1. 女娲无法从公开渠道搜到用户的思维框架，需要用户提供素材
 2. 引导用户提供：个人文章/博客、录制过的视频/播客、写过的决策备忘录、自我描述
 3. Phase 1的6个Agent改为分析用户提供的素材，而非网络搜索
 4. 特别注意「自我认知偏差」——用户可能高估某些特质、忽略盲点，可以追问身边人的评价
+
+#### `self-local-corpus` 分支（本地目录蒸馏）
+
+> **本节是 Nuwa 对「蒸馏我自己 + 提供本地目录」请求的唯一入口规范；命令细节、来源分类、检查点与隐私默认以 `references/self-distill-workflow.md` 为准，详见该文档。**
+
+**触发条件**（同时满足，否则不进入本分支）：
+
+1. 用户明确要求蒸馏「我自己」/「做一个我的 skill」/「自我 profile」。
+2. 用户提供了**本地目录绝对路径**（如 `/Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw`），且目录内可识别的语义素材 ≥ 数十个文件。
+3. 仅蒸馏公众人物（他人名）→ 不进入本分支。
+4. 完整 onboarding 或后续爆款工厂链路（强自传/短视频/上号）→ 由 `baokuan-factory` 编排并委托 Nuwa，本分支只承担独立「蒸馏我自己」请求。
+
+**路由顺序**（必须严格按此顺序执行，不得跳步；任一步失败立即停止）：
+
+1. **无 policy inventory**：调用 `python3 skills/nuwa-skill/scripts/inventory_local_corpus.py <source_root> --profile-dir <profile-dir>` 生成 `references/source-manifest.json`（所有文件 `policy_class: unclassified`、`can_distill: false`）与 `references/research/00-source-inventory.md`。**绝对禁止复制或移动 `source_root` 内任何文件到 profile 目录**；profile 目录建议用 `skills/<handle>-profile/`（被 `.gitignore` 忽略的运行时 profile 形态）。
+2. **Nuwa 提出 policy 草稿**：Nuwa 阅读 manifest 与 inventory review 后，按 `references/self-distill-workflow.md` §2 的五类来源 class（authored / private-evidence / adapted / external / excluded）为每个 family 起草 glob 规则，并逐条向用户解释匹配原因。
+3. **用户明确确认**：每一条 glob 都要用户口头或文本确认（或修改后确认）。**未确认的 policy 一律不得进入下一阶段**。
+4. **带 policy 重跑**：用户把确认后的 JSON 写入 `<profile-dir>/references/source-policy.json` 后，再次调用 `inventory_local_corpus.py --policy <path>`。仅当 `can_distill: true` 时才允许继续；任何 `unclassified` 存在都必须先解决。
+5. **Checkpoint C 预算确认**：Nuwa 必须主动汇报本轮预计读取的 authored 总字节、private-evidence 摘要文件数、adapted 文件数；超出 §4 阅读预算必须显式分批并重新走 Checkpoint C，不得闷头开跑。
+6. **六维研究**：按 `references/self-distill-workflow.md` §5 撰写 `references/research/01-positioning.md` … `06-tensions-and-evolution.md`，并用 `python3 skills/nuwa-skill/scripts/merge_research.py <profile-dir> --mode self` 汇总。
+7. **资产卡与 `SKILL.md`**：先写 `assets/*.md` 与 `assets/index.md`，再写精简 `SKILL.md`（目标 3,000–6,000 estimated tokens；公式见 `scripts/quality_check.py`）。
+8. **Checkpoint D 质量门**：调用 `python3 skills/nuwa-skill/scripts/quality_check.py <profile-dir>`，必须退出码 0 才能写入正式 `skills/<handle>-profile/`。
+9. **回写 profile 标记**：质量门通过后，把 `skills/<handle>-profile/` 路径写入 `~/.baokuan-factory/profile`，交给 baokuan 下游注入。
+
+**默认纯本地约束**：
+
+- 本分支默认**不联网佐证**；除非用户明确说「帮我查一下 XX 是否成立」之类问题，不得触发 WebSearch / browse / 网页 / 小宇宙 / 任何网络渠道。Nuwa 不得主动联网或抓取外部页面作为个人主张。
+- 13,000+ 文件级语料允许在当前工作机上 120 秒内完成 `--check` 只读盘点；自动化测试只跑合成语料。
+- 隐私脱敏默认：聊天原文、日记原文、外部材料摘要一律外部只读；可进 profile 的只有「脱敏后的主题归纳 / summaries / analysis」，并按 `references/self-distill-workflow.md` §8 通过公开面隐私扫描（不扫描 `references/`）。
+- 第三方收藏 → 用户原创 IP 是禁止行为：external-only 想法不得登记为个人资产（仅可作为 `references/research/` 中的对照与背景）。
+
+**与现有流程的关系**：
+
+- `references/self-distill-workflow.md`：本分支的全部规则、五类来源、四个 checkpoint、阅读预算、资产卡证据门槛、隐私扫描规则 ID 的单一规范。任何跳步或重新猜测 class / budget 的行为视为偏离。
+- `references/self-profile-template.md`：精简 `SKILL.md` 必须按该模板的七章节（`定位与受众` / `核心心智模型` / `决策启发式` / `表达DNA` / `内容品味与评分标准` / `价值观与反模式` / `诚实边界`）展开；模板禁用任何公众人物角色扮演指令。
+- `scripts/inventory_local_corpus.py`：本分支的盘点 CLI；用法见脚本 `--help`。
+- `scripts/merge_research.py --mode self`：合并研究材料；person 模式保持不变。
+- `scripts/quality_check.py`：自动识别 `profile_type: self` 并跑章节 / 体量 / 公开面隐私扫描硬性检查。
+
+**校验命令**：
+
+```bash
+python3 -c 'from pathlib import Path; t=Path("skills/nuwa-skill/SKILL.md").read_text(); assert "self-local-corpus" in t and "inventory_local_corpus.py" in t and "self-profile-template.md" in t'
+```
+
+成功 → SKILL.md 仍含分支名 self-local-corpus、引用 inventory CLI 与 self-profile-template.md。本校验是 US-012 / US-013 的最小约定，任何后续对 `特殊场景 > 蒸馏用户自己` 段的修改必须维持这三个字符串同时出现。
 
 ---
 
