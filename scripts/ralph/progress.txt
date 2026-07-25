@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Python CLI 使用标准库 `argparse` + `pathlib`，输入校验必须发生在任何遍历或写入之前；行为测试使用 `unittest` + `tempfile` + `subprocess`
 - `skills/<name>-profile/` 是被 .gitignore 忽略的个人 profile 目录；下游 runtime 仍可加载
 - nuwa-skill 的研究材料命名固定为 `references/research/01-XX.md` 到 `06-XX.md`，合并工具 merge_research.py 按文件名扫描
 - 公众人物 quality_check.py 当前不区分 profile_type；新增 self 模式需要在 frontmatter 检测后切换校验
@@ -32,3 +33,16 @@
   - quality_check.py 的 CJK + ceil(非CJK/4) 估算口径已在 self-distill-workflow.md §1 锁定，模板在自检清单里必须复述同一公式，否则 quality gate 与模板口径会漂移
   - 模板里所有 `assets/*.md` 链接用相对路径（`../assets/...`）；不要引用绝对路径或仓库根路径，下游 install 后的 symlink 可能不在仓库根目录
   - 公众人物模板 `references/skill-template.md` 带"我是XX"的角色扮演指令，自我模板必须显式禁用；任何后续生成的 self SKILL.md 不得复制该模板的语气
+
+## 2026-07-25 01:08 - US-003
+- 实现 `inventory_local_corpus.py` CLI 骨架，支持 `source_root`、`--profile-dir`、`--policy`、`--max-file-bytes`（默认 2000000）和 `--check`
+- 在任何遍历或写入前拒绝缺失/非目录 source_root、非 check 模式缺失 profile-dir，以及位于 source_root 内的 profile-dir；check 模式不创建文件
+- 新增 6 个标准库 unittest，覆盖参数接受、具体路径错误、写入边界和 check 零写入
+- 更改的文件：`skills/nuwa-skill/scripts/inventory_local_corpus.py`、`tests/test_nuwa_local_corpus.py`、`scripts/ralph/prd.json`、`scripts/ralph/progress.txt`
+- 验证：`python3 -m unittest tests.test_nuwa_local_corpus.LocalCorpusInputValidationTests -v`（6 tests OK）；新增 Python 文件 AST 解析通过；`git diff --check` 通过；CLI `--help` 退出码 0
+- 提交：`40e6d06 feat: US-003 - 实现 inventory CLI 参数和路径防护`
+- **未来迭代的学习：**
+  - `Path.resolve(strict=False)` 适合在输出目录尚不存在时做包含关系防护，同时不会创建目录
+  - 当前 CLI 成功路径只完成参数与边界校验；US-004 应在 `validate_inputs()` 之后接入确定性遍历，不应提前增加 manifest 写入
+  - `--policy` 在 US-003 只要求可解析参数，不校验文件存在性或内容；这些属于 US-006，避免 story 越界
+---
