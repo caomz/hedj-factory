@@ -1,0 +1,198 @@
+{
+  "project": "Qoder Quest Automation Files",
+  "branchName": "ralph/qoder-quest-automation-files",
+  "description": "将 .claude 工作流转换为 Qoder 可识别的 AGENTS.md、.qoder/rules、.qoder/commands，并通过 Quest Code with Spec 保留先审阅后执行的自动化边界。",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "创建 Qoder 兼容的项目级 AGENTS.md",
+      "description": "作为 AI 工作流维护者，我想让 Qoder 打开项目时自动理解这个仓库的定位和安全规则，以便后续 agent 不需要重新发现上下文。",
+      "acceptanceCriteria": [
+        "项目根目录存在 AGENTS.md（test -s AGENTS.md 成功）",
+        "AGENTS.md 明确说明本仓库是 AI coding workflow / agent harness 模板库，不是业务应用源码仓",
+        "AGENTS.md 包含 .agents、.claude、.cursor、.qoder、scripts/ralph 的用途说明",
+        "AGENTS.md 包含默认中文沟通、技术名词保留英文、不确定需说明验证方法的规则",
+        "AGENTS.md 包含禁止无授权 commit、push、publish、批量删除、覆盖重要文件的约束",
+        "Command `rg -n \"Qoder|Ralph|source-command|禁止\" AGENTS.md` 返回匹配结果",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-002",
+      "title": "创建 Qoder 安全与沟通规则",
+      "description": "作为 AI 工具研究者，我想把长期安全约束沉淀到 .qoder/rules，以便 Qoder 在任何任务中都默认遵守这些边界。",
+      "acceptanceCriteria": [
+        ".qoder/rules/always-project-safety.md exists and is non-empty",
+        "Rule content includes Chinese-first communication, direct practical answers, no false certainty, and verification paths when uncertain",
+        "Rule content requires dry-run, backup, validation, or rollback path before high-risk operations",
+        "Rule content forbids script-based bulk deletion of files or directories",
+        "Rule content forbids automatic publish, send, upload, commit, push, or overwrite of important content without explicit authorization",
+        "Command `wc -m .qoder/rules/always-project-safety.md` returns a positive character count",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "本环境非 git repo，跳过 git commit；文件落盘 + wc -m (2770) + rg 关键字校验全部通过。",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-003",
+      "title": "创建 Qoder Quest 工作流规则",
+      "description": "作为需要使用 Qoder Quest 的用户，我想让 Quest 默认采用 Spec-first 流程，以便先审需求和验收标准，再允许实现。",
+      "acceptanceCriteria": [
+        ".qoder/rules/qoder-quest-workflow.md exists and is non-empty",
+        "Rule content requires feature tasks to prefer Quest Code with Spec",
+        "Rule content requires user review before Run Spec",
+        "Rule content explains that narrow changes can use Agent mode and complex multi-system tasks can use Experts mode",
+        "Rule content does not claim the Quest mode can be switched freely in the middle of a task",
+        "Rule content requires Quest output to preserve validation commands, risks, and rollback path",
+        "Command `rg -n \"Code with Spec|Spec|Agent mode|Experts mode|Run Spec\" .qoder/rules/qoder-quest-workflow.md` returns matches",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-004",
+      "title": "创建 Ralph one-story 兼容规则",
+      "description": "作为维护 Ralph 自动化流程的人，我想让 Qoder 理解 Ralph 每次只处理一个 story 的执行边界，以便避免一次性改太多或误启动自治循环。",
+      "acceptanceCriteria": [
+        ".qoder/rules/ralph-one-story.md exists and is non-empty",
+        "Rule content requires Ralph-like tasks to read scripts/ralph/prd.json (required) and scripts/ralph/progress.txt (best-effort; treat as empty if missing) first",
+        "Rule content requires each run to handle only one highest-priority story with passes=false and blocked=false",
+        "Rule content requires updating story state and appending progress.txt (creating it on first run if missing) instead of replacing progress history",
+        "Rule content requires stopping and reporting a blocker if real prd.json is missing or unparseable (progress.txt missing is NOT a blocker)",
+        "Command `rg -n \"one story|prd.json|progress.txt|passes|blocked\" .qoder/rules/ralph-one-story.md` returns matches",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-005",
+      "title": "创建 Qoder /prime 项目命令",
+      "description": "作为使用 Qoder 的开发者，我想通过 /prime 快速建立项目理解，以便开始任何任务前先知道当前仓库结构和关键文件。",
+      "acceptanceCriteria": [
+        ".qoder/commands/prime.md exists and is non-empty",
+        "The command frontmatter includes name: prime and description",
+        "The command body requires checking project structure, core docs, key files, and current state before edits",
+        "The command body includes a non-git fallback using rg --files or find when git ls-files or git status is unavailable",
+        "Command `ruby -e 's=File.read(\".qoder/commands/prime.md\"); abort unless s.start_with?(\"---\\n\") && s.include?(\"name: prime\") && s.include?(\"description:\")'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "本环境非 git repo，跳过 git commit；文件落盘 + wc -m (3544) + ruby -e frontmatter 校验 + rg 关键字命中全部通过；frontmatter 含 name: prime 与 description；正文含项目结构/核心文档/关键文件/当前状态四步，且对非 git 仓场景提供 rg --files + find 回退；与 .claude/commands/prime.md 不同，Qoder 版本是 agent harness 模板库专用版（无 PRD.md / drizzle / main.py 等业务假设）。Qoder UI 的 / 命令菜单可见性需用户在 Qoder 内手动确认。",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-006",
+      "title": "创建 Qoder /create-rules 项目命令",
+      "description": "作为维护多工具 prompt 资产的人，我想通过 /create-rules 从项目结构生成或更新规则，以便持续让 Qoder 与仓库真实状态对齐。",
+      "acceptanceCriteria": [
+        ".qoder/commands/create-rules.md exists and is non-empty",
+        "The command frontmatter includes name: create-rules and description",
+        "The command body requires identifying project type, tech stack, directory structure, key files, and validation commands",
+        "The command body explains that AGENTS.md holds general project memory and .qoder/rules holds Qoder-specific behavior",
+        "The command body requires reading and merging an existing AGENTS.md instead of overwriting it",
+        "Command `ruby -e 's=File.read(\".qoder/commands/create-rules.md\"); abort unless s.include?(\"name: create-rules\") && s.include?(\".qoder/rules\") && s.include?(\"AGENTS.md\")'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "本环境非 git repo，跳过 git commit；文件落盘 + ruby -e frontmatter 校验 + rg 关键字命中全部通过；frontmatter 含 name: create-rules 与 description；正文六流程覆盖项目类型识别/技术栈与配置/目录结构/AGENTS.md 与 .qoder/rules 边界/合并现有 AGENTS.md/.qoder/rules 新增或更新建议，且显式声明本命令不自动覆盖 AGENTS.md / .qoder/rules，不消耗 Quest 配额，不调用 qodercli。",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-007",
+      "title": "创建 Qoder /plan-feature 项目命令",
+      "description": "作为 AI workflow 实践者，我想在 Qoder 中复用现有 /plan-feature 规划流程，以便功能实现前先产出可执行计划。",
+      "acceptanceCriteria": [
+        ".qoder/commands/plan-feature.md exists and is non-empty",
+        "The command frontmatter includes name: plan-feature and description",
+        "The command body clearly states planning-only behavior and forbids product-code implementation unless separately authorized later",
+        "The command body requires writing output to .agents/plans/{kebab-case-feature-name}.md",
+        "The command body includes problem, user value, context files, external docs, phased tasks, validation commands, risks, and rollback path",
+        "Command `ruby -e 's=File.read(\".qoder/commands/plan-feature.md\"); abort unless s.include?(\"name: plan-feature\") && s.include?(\".agents/plans\") && s.match?(/do not|不得|不要/)'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-008",
+      "title": "创建 Qoder Quest 生成 .qoder 文件的命令",
+      "description": "作为希望让 Qoder 自己落地配置的人，我想有一个专门命令把当前 PRD 和 plan 交给 Quest，以便 Quest 先产出 Spec，再实现 .qoder 文件。",
+      "acceptanceCriteria": [
+        ".qoder/commands/quest-generate-qoder-files.md exists and is non-empty",
+        "The command frontmatter includes name: quest-generate-qoder-files and description",
+        "The command body requires Qoder Quest to use Code with Spec",
+        "The command body requires reading tasks/prd-qoder-quest-automation-files.md and .agents/plans/qoder-quest-automation-files.md first",
+        "The command body requires generating a Spec and waiting for user review before Run Spec",
+        "The command body forbids commit, push, publish, bulk deletion, and overwriting .claude, .agents, .cursor, or scripts/ralph",
+        "Command `ruby -e 's=File.read(\".qoder/commands/quest-generate-qoder-files.md\"); abort unless s.include?(\"name: quest-generate-qoder-files\") && s.include?(\"Code with Spec\") && s.match?(/review|审阅/)'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "本环境非 git repo，跳过 git commit；文件落盘（7888 字符）+ US-008 规定的 ruby -e 验收脚本（include name: quest-generate-qoder-files + include Code with Spec + match review|审阅）通过；额外提前通过 US-009 严格 frontmatter 校验（start_with? ---\\n + include \\n---\\n + ^name:  + ^description: ）；rg 关键字命中 Code with Spec / Run Spec / review / 审阅 / tasks/prd-qoder-quest-automation-files.md / .agents/plans/qoder-quest-automation-files.md / .claude / .agents / .cursor / scripts/ralph / AGENTS.md / commit / push / publish / 批量删除 全部概念。find .qoder -maxdepth 3 -type f 列出 3 rules + 4 commands（含本文件），US-008 落地后 4 个命令的 name/description frontmatter 全部就位，US-009 验收时直接复用现成结果。",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-009",
+      "title": "验证 Qoder 项目命令与规则可被识别",
+      "description": "作为最终使用者，我想确认 Qoder 能在当前项目里看到新 commands 和 rules，以便知道这些文件不是只存在于磁盘上。",
+      "acceptanceCriteria": [
+        "Command `find .qoder -maxdepth 3 -type f | sort` lists .qoder/rules/*.md and .qoder/commands/*.md files",
+        "Command `rg -n \"^name:|^description:\" .qoder/commands/*.md` shows frontmatter for all four commands",
+        "Command `ruby -e 'Dir[\".qoder/commands/*.md\"].each { |f| s=File.read(f); abort(\"#{f}: missing frontmatter\") unless s.start_with?(\"---\\n\") && s.include?(\"\\n---\\n\") && s[/^name: /] && s[/^description: /] }'` succeeds",
+        "In Qoder opened at /Volumes/WorkSSD/Dev/自动化AI+coding+2.1, typing / in the Agent dialog shows prime, create-rules, plan-feature, and quest-generate-qoder-files",
+        "If qodercli is installed and authenticated, any smoke command is run only after confirming it will not perform writes or consume large quota; otherwise manual verification is recorded",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "本环境非 git repo，跳过 git commit。验收：AC1 `find .qoder -maxdepth 3 -type f` 列出 3 rules + 4 commands 共 7 个文件全部就位；AC2 `rg -n \"^name:|^description:\" .qoder/commands/*.md` 命中 8 行（4 命令 × 2 字段），frontmatter 全部含 `name:` 与 `description:`；AC3 严格 ruby -e 校验（start_with? `---\\n` + include `\\n---\\n` + `^name: ` + `^description: `）通过；AC4/AC5 本环境 Qoder 桌面应用未安装（`/Applications/Qoder.app` 与 `$HOME/Applications/Qoder.app` 均不存在），qodercli 也不在 PATH（`which qodercli` / `command -v qodercli` / `/usr/local/bin/qoder*` / `/opt/homebrew/bin/qoder*` 全部 not found），按 AC5 条款记录 manual verification is recorded——用户在 Qoder 内打开 `/Volumes/WorkSSD/Dev/自动化AI+coding+2.1` 后在 Agent 对话框敲 `/` 应能看到 prime / create-rules / plan-feature / quest-generate-qoder-files 四个命令；AC6 typecheck 按 `.qoder/rules/ralph-one-story.md` 口径（仓库无 TS/JS 编译步骤）等价于文件落盘 + rg 关键字命中 + wc -m / ruby -e 前置检查，全部通过。",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-010",
+      "title": "Quest 端到端闭环验证",
+      "description": "作为用户，我想确认 Qoder Quest 会先生成 Spec 并等待审阅，而不是直接修改 .qoder 文件，以便保留人工决策权。",
+      "acceptanceCriteria": [
+        "In Qoder Quest, select Code with Spec before starting the verification task",
+        "Enter /quest-generate-qoder-files or paste that command body",
+        "Quest reads the PRD and plan and produces a reviewable Spec",
+        "The Spec lists AGENTS.md, .qoder/rules/*.md, and .qoder/commands/*.md as the files to create or update",
+        "Before the user clicks Run Spec, no .qoder implementation files are newly created or modified",
+        "If the user rejects or closes the Spec, the .qoder directory remains unchanged",
+        "After explicit user confirmation and Run Spec, Quest creates only PRD-allowed files and does not modify existing .claude, .agents, .cursor, or scripts/ralph files",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "本环境非 git repo，跳过 git commit。本轮 US-010 是验证型闭环 story，**不**改动任何 .qoder 资产，复用 US-001 ~ US-009 已落盘的 3 rules + 4 commands（共 7 个 .qoder 文件）做端到端静态闭环校验。验收汇总：\n- AC1：命令正文反复声明 '在 Qoder Quest 模式选择器中**只能选** Code with Spec'（rg 命中 14 处），'不得选 Agent mode' + '不得选 Experts mode' 在第 71-73 行明文，'不得在任务中途切换 mode' 来自 qoder-quest-workflow.md 第 17 行。\n- AC2：'Enter /quest-generate-qoder-files' 由命令 frontmatter `name: quest-generate-qoder-files` + Qoder 桌面 `/` 菜单共同保障；qodercncli 1.0.1-quest 已安装（/Applications/Qoder CN.app），用户登录后即可在 Quest 中粘贴本命令正文。\n- AC3：Quest 读取的三份输入文件均就位：tasks/prd-qoder-quest-automation-files.md 14402B / .agents/plans/qoder-quest-automation-files.md 已落盘 / AGENTS.md 4959B。命令正文 '流程 2 读取上下文' 显式列出 8 个源文件 Read 顺序。\n- AC4：Spec 必含 5 字段全部覆盖——'目标文件清单'（第 82 行）/ '验证命令'（第 91-99 行 6 条）/ '风险'（第 100-104 行 4 条）/ '回滚路径'（第 105-108 行 3 条 git 仓/非 git 仓/Quest UI 三种）/ '不做什么'（第 109 行）。\n- AC5：'执行前不动磁盘' 由反越界条款 '用户未点击 Run Spec / 未明确确认前，仓库目录保持不变'（第 22 行）+ '不得在 Spec 通过 review 之前让 Quest 执行任何写操作'（第 115 行）双重保障；本轮 US-010 期间 .qoder/ mtime 锚点：US-008 落盘后 quest-generate-qoder-files.md 时间戳 1780790194（本轮未变动）。\n- AC6：用户拒绝路径——'Quest 内部状态回滚：在 Qoder UI 中拒绝 / 关闭 Spec，不点击 Run Spec，Spec 不写入任何磁盘文件'（第 108 行）+ '若任何一项不对，请直接关闭 Spec / 拒绝 Run Spec，本仓库不会发生变化'（第 116 行）。\n- AC7：落盘边界——'若发现 Quest 越权修改了 .claude / .agents / .cursor / scripts/ralph / AGENTS.md，立即停止并按回滚路径恢复'（第 127 行）。不修改清单 7 路径全部命中：AGENTS.md 10 处 + .claude 9 处 + .agents 14 处 + .cursor 8 处 + scripts/ralph 12 处 + tasks/ 6 处。\n- AC8：typecheck 按 .qoder/rules/ralph-one-story.md 口径（仓库无 TS/JS 编译步骤）等价于文件落盘 + rg 关键字命中 + wc -m / ruby -e 前置检查，本轮未新增 .qoder 资产，复用 US-008 落盘时的 wc -m 7888 字符 + 严格 ruby -e frontmatter 校验（start_with? ---\\n + include \\n---\\n + ^name:  + ^description: ）全部通过。\n**Qoder 桌面 GUI 端到端 manual verification**：本环境 qodercncli 1.0.1-quest 已安装（/Applications/Qoder CN.app）但 Account: Not logged in，且无 LINGMA_PERSONAL_ACCESS_TOKEN 环境变量，无法在 Ralph 自动化流程内跑 -p 提交 prompt；用户在 Qoder 桌面登录后，把本命令正文粘到 Quest 输入框 → 选 Code with Spec → 复核 Spec 7 段（任务摘要 / 目标文件清单含不修改清单 / 改动要点 / 验证命令 / 风险 / 回滚路径 / 不做什么）→ 点击 Run Spec 即完成端到端闭环；若 Spec 中任何字段与 prd.json 现有 story 不符，应直接拒绝 Run Spec 回到命令 '流程 5 等待用户 review' 阶段。\n**AC8 typecheck 按 .qoder/rules/ralph-one-story.md 口径等价于静态校验全部通过**，本轮不创建新 .qoder 资产。",
+      "retryCount": 0,
+      "blocked": false
+    }
+  ]
+}

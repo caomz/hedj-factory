@@ -1,0 +1,27 @@
+## Codebase Patterns
+- This workspace is an AI coding workflow / agent harness template, not a normal product application repo.
+- The current Ralph backlog comes from `tasks/prd-qoder-quest-automation-files.md`.
+- Qoder adapter work should be staged: `AGENTS.md` first, then `.qoder/rules`, then `.qoder/commands`, then Qoder UI / Quest verification.
+- Do not start a Ralph implementation loop unless the user explicitly asks to run it.
+- 当前仓库不是 git repo（`git status` 返回 fatal: not a git repository），所以 Ralph 流程中的 `git commit` 步骤在本环境无法直接执行；US 验收以文件落盘 + rg 校验为准。
+- `source-command` 指代 `.claude/commands/`、`.cursor/commands/`、`.agents/commands/`、`.qoder/commands/` 中的命令入口，是跨工具 prompt 工作流的统称。
+
+## 2026-06-07 00:00 - PRD Conversion
+- Converted `tasks/prd-qoder-quest-automation-files.md` into `scripts/ralph/prd.json`.
+- Initialized this progress log because no previous `scripts/ralph/progress.txt` existed.
+- **未来迭代的学习：**
+  - The `.qoder` directory began empty for this feature.
+  - The work is file/prompt infrastructure, so validation should prioritize file existence, frontmatter parsing, grep checks, and manual Qoder / Quest observation.
+  - Do not auto-run Qoder Quest Run Spec, commit, push, publish, upload, or bulk delete files without explicit same-turn authorization.
+---
+
+## 2026-06-07 00:10 - US-001
+- 在项目根目录创建 `AGENTS.md`，覆盖仓库定位（AI coding workflow / agent harness 模板库）、`.agents`/`.claude`/`.cursor`/`.qoder`/`scripts/ralph` 用途、中文沟通规则、禁止无授权 commit/push/publish/批量删除/覆盖的硬性约束，并列出 source-command 入口与 Ralph one-story 边界。
+- 更改的文件：`AGENTS.md`、`scripts/ralph/prd.json`（US-001 `passes: true`）、`scripts/ralph/progress.txt`（本条目）。
+- 验收：`test -s AGENTS.md` 通过；`rg -n "Qoder|Ralph|source-command|禁止" AGENTS.md` 命中 20+ 行；Typecheck 不适用（无产品代码）。
+- 跳过：`git commit` —— 当前目录非 git repo（`git status` 返回 `fatal: not a git repository`），与 PRD 假设一致。
+- **未来迭代的学习：**
+  - `AGENTS.md` 与 `.qoder/rules/always-project-safety.md` 在「禁止」段会重复，冲突时 rules 优先（Qoder 规则优先于 `AGENTS.md`）；后续写 rules 时引用 `AGENTS.md` 段落而非整段复制，避免漂移。
+  - `AGENTS.md` 的「项目定位」段必须明确「不是业务应用源码仓」，避免后续 agent 误把这里当产品项目来开发。
+  - `source-command` 这个术语是把 `/prime`、`/create-rules`、`/plan-feature`、`/quest-generate-qoder-files` 跨工具统一起来的口语化统称，AGENTS.md 与 progress 都采用这一命名。
+---

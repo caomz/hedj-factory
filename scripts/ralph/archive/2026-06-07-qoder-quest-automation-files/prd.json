@@ -1,0 +1,198 @@
+{
+  "project": "Qoder Quest Automation Files",
+  "branchName": "ralph/qoder-quest-automation-files",
+  "description": "将 .claude 工作流转换为 Qoder 可识别的 AGENTS.md、.qoder/rules、.qoder/commands，并通过 Quest Code with Spec 保留先审阅后执行的自动化边界。",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "创建 Qoder 兼容的项目级 AGENTS.md",
+      "description": "作为 AI 工作流维护者，我想让 Qoder 打开项目时自动理解这个仓库的定位和安全规则，以便后续 agent 不需要重新发现上下文。",
+      "acceptanceCriteria": [
+        "项目根目录存在 AGENTS.md",
+        "AGENTS.md 明确说明本仓库是 AI coding workflow / agent harness 模板库，不是业务应用源码仓",
+        "AGENTS.md 包含 .agents、.claude、.cursor、.qoder、scripts/ralph 的用途说明",
+        "AGENTS.md 包含默认中文沟通、技术名词保留英文、不确定需说明验证方法的规则",
+        "AGENTS.md 包含禁止无授权 commit、push、publish、批量删除、覆盖重要文件的约束",
+        "Command `test -s AGENTS.md && rg -n \"Qoder|Ralph|source-command|禁止\" AGENTS.md` returns matches",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-002",
+      "title": "创建 Qoder 安全与沟通规则",
+      "description": "作为 AI 工具研究者，我想把长期安全约束沉淀到 .qoder/rules，以便 Qoder 在任何任务中都默认遵守这些边界。",
+      "acceptanceCriteria": [
+        ".qoder/rules/always-project-safety.md exists and is non-empty",
+        "Rule content includes Chinese-first communication, direct practical answers, no false certainty, and verification paths when uncertain",
+        "Rule content requires dry-run, backup, validation, or rollback path before high-risk operations",
+        "Rule content forbids script-based bulk deletion of files or directories",
+        "Rule content forbids automatic publish, send, upload, commit, push, or overwrite of important content without explicit authorization",
+        "Command `test -s .qoder/rules/always-project-safety.md && wc -m .qoder/rules/always-project-safety.md` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-003",
+      "title": "创建 Qoder Quest 工作流规则",
+      "description": "作为需要使用 Qoder Quest 的用户，我想让 Quest 默认采用 Spec-first 流程，以便先审需求和验收标准，再允许实现。",
+      "acceptanceCriteria": [
+        ".qoder/rules/qoder-quest-workflow.md exists and is non-empty",
+        "Rule content requires feature tasks to prefer Quest Code with Spec",
+        "Rule content requires user review before Run Spec",
+        "Rule content explains that narrow changes can use Agent mode and complex multi-system tasks can use Experts mode",
+        "Rule content does not claim the Quest mode can be switched freely in the middle of a task",
+        "Rule content requires Quest output to preserve validation commands, risks, and rollback path",
+        "Command `rg -n \"Code with Spec|Spec|Agent mode|Experts mode|Run Spec\" .qoder/rules/qoder-quest-workflow.md` returns matches",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-004",
+      "title": "创建 Ralph one-story 兼容规则",
+      "description": "作为维护 Ralph 自动化流程的人，我想让 Qoder 理解 Ralph 每次只处理一个 story 的执行边界，以便避免一次性改太多或误启动自治循环。",
+      "acceptanceCriteria": [
+        ".qoder/rules/ralph-one-story.md exists and is non-empty",
+        "Rule content requires Ralph-like tasks to read scripts/ralph/prd.json and scripts/ralph/progress.txt first",
+        "Rule content requires each run to handle only one highest-priority story with passes=false and blocked=false",
+        "Rule content requires updating story state and appending progress.txt instead of replacing progress history",
+        "Rule content requires stopping and reporting a blocker if real prd.json or progress.txt is missing",
+        "Command `rg -n \"one story|prd.json|progress.txt|passes|blocked\" .qoder/rules/ralph-one-story.md` returns matches",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-005",
+      "title": "创建 Qoder /prime 项目命令",
+      "description": "作为使用 Qoder 的开发者，我想通过 /prime 快速建立项目理解，以便开始任何任务前先知道当前仓库结构和关键文件。",
+      "acceptanceCriteria": [
+        ".qoder/commands/prime.md exists and is non-empty",
+        "The command frontmatter includes name: prime and description",
+        "The command body requires checking project structure, core docs, key files, and current state before edits",
+        "The command body includes a non-git fallback using rg --files or find when git ls-files or git status is unavailable",
+        "Command `ruby -e 's=File.read(\".qoder/commands/prime.md\"); abort unless s.start_with?(\"---\\n\") && s.include?(\"name: prime\") && s.include?(\"description:\")'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-006",
+      "title": "创建 Qoder /create-rules 项目命令",
+      "description": "作为维护多工具 prompt 资产的人，我想通过 /create-rules 从项目结构生成或更新规则，以便持续让 Qoder 与仓库真实状态对齐。",
+      "acceptanceCriteria": [
+        ".qoder/commands/create-rules.md exists and is non-empty",
+        "The command frontmatter includes name: create-rules and description",
+        "The command body requires identifying project type, tech stack, directory structure, key files, and validation commands",
+        "The command body explains that AGENTS.md holds general project memory and .qoder/rules holds Qoder-specific behavior",
+        "The command body requires reading and merging an existing AGENTS.md instead of overwriting it",
+        "Command `ruby -e 's=File.read(\".qoder/commands/create-rules.md\"); abort unless s.include?(\"name: create-rules\") && s.include?(\".qoder/rules\") && s.include?(\"AGENTS.md\")'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-007",
+      "title": "创建 Qoder /plan-feature 项目命令",
+      "description": "作为 AI workflow 实践者，我想在 Qoder 中复用现有 /plan-feature 规划流程，以便功能实现前先产出可执行计划。",
+      "acceptanceCriteria": [
+        ".qoder/commands/plan-feature.md exists and is non-empty",
+        "The command frontmatter includes name: plan-feature and description",
+        "The command body clearly states planning-only behavior and forbids product-code implementation unless separately authorized later",
+        "The command body requires writing output to .agents/plans/{kebab-case-feature-name}.md",
+        "The command body includes problem, user value, context files, external docs, phased tasks, validation commands, risks, and rollback path",
+        "Command `ruby -e 's=File.read(\".qoder/commands/plan-feature.md\"); abort unless s.include?(\"name: plan-feature\") && s.include?(\".agents/plans\") && s.match?(/do not|不得|不要/)'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-008",
+      "title": "创建 Qoder Quest 生成 .qoder 文件的命令",
+      "description": "作为希望让 Qoder 自己落地配置的人，我想有一个专门命令把当前 PRD 和 plan 交给 Quest，以便 Quest 先产出 Spec，再实现 .qoder 文件。",
+      "acceptanceCriteria": [
+        ".qoder/commands/quest-generate-qoder-files.md exists and is non-empty",
+        "The command frontmatter includes name: quest-generate-qoder-files and description",
+        "The command body requires Qoder Quest to use Code with Spec",
+        "The command body requires reading tasks/prd-qoder-quest-automation-files.md and .agents/plans/qoder-quest-automation-files.md first",
+        "The command body requires generating a Spec and waiting for user review before Run Spec",
+        "The command body forbids commit, push, publish, bulk deletion, and overwriting .claude, .agents, .cursor, or scripts/ralph",
+        "Command `ruby -e 's=File.read(\".qoder/commands/quest-generate-qoder-files.md\"); abort unless s.include?(\"name: quest-generate-qoder-files\") && s.include?(\"Code with Spec\") && s.match?(/review|审阅/)'` succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-009",
+      "title": "验证 Qoder 项目命令与规则可被识别",
+      "description": "作为最终使用者，我想确认 Qoder 能在当前项目里看到新 commands 和 rules，以便知道这些文件不是只存在于磁盘上。",
+      "acceptanceCriteria": [
+        "Command `find .qoder -maxdepth 3 -type f | sort` lists .qoder/rules/*.md and .qoder/commands/*.md files",
+        "Command `rg -n \"^name:|^description:\" .qoder/commands/*.md` shows frontmatter for all four commands",
+        "Command `ruby -e 'Dir[\".qoder/commands/*.md\"].each { |f| s=File.read(f); abort(\"#{f}: missing frontmatter\") unless s.start_with?(\"---\\n\") && s.include?(\"\\n---\\n\") && s[/^name: /] && s[/^description: /] }'` succeeds",
+        "In Qoder opened at /Volumes/WorkSSD/Dev/自动化AI+coding+2.1, typing / in the Agent dialog shows prime, create-rules, plan-feature, and quest-generate-qoder-files",
+        "If qodercli is installed and authenticated, any smoke command is run only after confirming it will not perform writes or consume large quota; otherwise manual verification is recorded",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-010",
+      "title": "Quest 端到端闭环验证",
+      "description": "作为用户，我想确认 Qoder Quest 会先生成 Spec 并等待审阅，而不是直接修改 .qoder 文件，以便保留人工决策权。",
+      "acceptanceCriteria": [
+        "In Qoder Quest, select Code with Spec before starting the verification task",
+        "Enter /quest-generate-qoder-files or paste that command body",
+        "Quest reads the PRD and plan and produces a reviewable Spec",
+        "The Spec lists AGENTS.md, .qoder/rules/*.md, and .qoder/commands/*.md as the files to create or update",
+        "Before the user clicks Run Spec, no .qoder implementation files are newly created or modified",
+        "If the user rejects or closes the Spec, the .qoder directory remains unchanged",
+        "After explicit user confirmation and Run Spec, Quest creates only PRD-allowed files and does not modify existing .claude, .agents, .cursor, or scripts/ralph files",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    }
+  ]
+}
