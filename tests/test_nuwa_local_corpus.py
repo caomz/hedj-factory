@@ -1,5 +1,6 @@
 """Nuwa 本地知识目录 inventory 的标准库测试。"""
 
+import argparse
 import hashlib
 import json
 import shutil
@@ -8,11 +9,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "skills" / "nuwa-skill" / "scripts" / "inventory_local_corpus.py"
 sys.path.insert(0, str(SCRIPT.parent))
+import inventory_local_corpus as inventory_module
 from inventory_local_corpus import (
     apply_source_policy,
     assign_duplicate_groups,
@@ -113,6 +116,79 @@ class LocalCorpusInputValidationTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("max_file_bytes=1234", result.stdout)
+
+
+class LeftoverHardeningTests(unittest.TestCase):
+    """覆盖收尾加固：--prewarm 预热计时与 firmlink 等价路径祖先防护。"""
+
+    def run_cli(self, *args: object) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *(str(arg) for arg in args)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @staticmethod
+    def summary_fields(stdout: str) -> dict:
+        fields = dict(token.split("=", 1) for token in stdout.split() if "=" in token)
+        fields.pop("elapsed_seconds", None)
+        return fields
+
+    def test_check_prewarm_reports_same_summary_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            source_root = Path(source_dir)
+            (source_root / "a.md").write_text("synthetic a", encoding="utf-8")
+            (source_root / "b.md").write_text("synthetic b", encoding="utf-8")
+            before = sorted(
+                path.relative_to(source_root) for path in source_root.rglob("*")
+            )
+
+            plain = self.run_cli(source_root, "--check")
+            prewarmed = self.run_cli(source_root, "--check", "--prewarm")
+
+            after = sorted(
+                path.relative_to(source_root) for path in source_root.rglob("*")
+            )
+
+        self.assertEqual(prewarmed.returncode, 0, prewarmed.stderr)
+        self.assertEqual(before, after)
+        self.assertIn("mode=check", prewarmed.stdout)
+        self.assertIn("elapsed_seconds=", prewarmed.stdout)
+        self.assertEqual(
+            self.summary_fields(plain.stdout),
+            self.summary_fields(prewarmed.stdout),
+        )
+
+    def test_same_directory_and_nearest_existing_ancestor(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            other = root / "other"
+            other.mkdir()
+            self.assertTrue(inventory_module.is_same_directory(root, root))
+            self.assertFalse(inventory_module.is_same_directory(root, other))
+            self.assertFalse(inventory_module.is_same_directory(root / "missing", root))
+            self.assertEqual(
+                inventory_module.nearest_existing_path(root / "a" / "b" / "c"),
+                root,
+            )
+
+    def test_inode_guard_rejects_alias_when_string_check_misses(self):
+        # firmlink 无法在测试中创建；用 mock 让字符串前缀防护失效，
+        # 单独驱动 inode 层的祖先比较分支。
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_root = Path(temp_dir).resolve()
+            args = argparse.Namespace(
+                source_root=source_root,
+                check=False,
+                profile_dir=source_root,
+            )
+            with mock.patch.object(inventory_module, "is_within", return_value=False):
+                with self.assertRaises(
+                    inventory_module.InputValidationError
+                ) as raised:
+                    inventory_module.validate_inputs(args)
+        self.assertIn("firmlink", str(raised.exception))
 
 
 class LocalCorpusTraversalTests(unittest.TestCase):
@@ -965,13 +1041,13 @@ class VersionSelectionTests(unittest.TestCase):
             source_root.mkdir()
             (source_root / "notes").mkdir()
             (source_root / "notes" / "plan-v0.1.md").write_text(
-                "old", encoding="utf-8"
+                "SENTINEL-BODY-V01", encoding="utf-8"
             )
             (source_root / "notes" / "plan-v0.2.md").write_text(
-                "newer", encoding="utf-8"
+                "SENTINEL-BODY-V02", encoding="utf-8"
             )
             (source_root / "notes" / "plan-v0.3.md").write_text(
-                "newest", encoding="utf-8"
+                "SENTINEL-BODY-V03", encoding="utf-8"
             )
 
             profile_dir = work_dir / "profile"
@@ -990,9 +1066,9 @@ class VersionSelectionTests(unittest.TestCase):
         self.assertIn("## 版本序列", review_text)
         self.assertIn("version_groups: 1", review_text)
         self.assertIn("notes/plan-v0.3.md", review_text)
-        self.assertNotIn("old", review_text)
-        self.assertNotIn("newer", review_text)
-        self.assertNotIn("newest", review_text)
+        self.assertNotIn("SENTINEL-BODY-V01", review_text)
+        self.assertNotIn("SENTINEL-BODY-V02", review_text)
+        self.assertNotIn("SENTINEL-BODY-V03", review_text)
 
 
 class MergeResearchCompatibilityTests(unittest.TestCase):

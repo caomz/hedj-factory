@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """只读盘点本地知识目录，生成确定性的文件资格记录。
 
-当前阶段只在内存中生成基础记录并输出统计；manifest 与 review 文件由后续
-story 实现。
+``--check`` 只输出统计摘要；提供 ``--profile-dir`` 时写入
+``references/source-manifest.json`` 与 ``research/00-source-inventory.md``。
 
 用法：
     python3 inventory_local_corpus.py SOURCE_ROOT --check
+    python3 inventory_local_corpus.py SOURCE_ROOT --check --prewarm
     python3 inventory_local_corpus.py SOURCE_ROOT --profile-dir PROFILE_DIR
+
+万级文件的规模验收建议加 ``--prewarm``：冷启动 page cache 未热时
+elapsed_seconds 可能贴近验收上限（实测 13k+ 文件冷启动 119s、热缓存
+15-55s），预热后计时才能稳定复现。
 """
 
 import argparse
@@ -104,6 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="只检查输入并输出摘要，不创建或修改任何文件",
     )
+    parser.add_argument(
+        "--prewarm",
+        action="store_true",
+        help="正式盘点前先做一次不计时的预热遍历，elapsed_seconds 只统计预热后的正式盘点",
+    )
     return parser
 
 
@@ -114,6 +124,28 @@ def is_within(path: Path, directory: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def nearest_existing_path(path: Path) -> Optional[Path]:
+    """返回 path 自身或最近的已存在祖先；全部不存在时返回 None。"""
+    for candidate in (path, *path.parents):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def is_same_directory(left: Path, right: Path) -> bool:
+    """用 st_dev/st_ino 判断两个路径是否指向同一目录实体。
+
+    macOS APFS firmlink 允许同一目录存在两种绝对拼法，且 ``Path.resolve()``
+    不做归一化，仅靠字符串前缀防护会漏判，需要 inode 层比较兜底。
+    """
+    try:
+        left_stat = left.stat()
+        right_stat = right.stat()
+    except OSError:
+        return False
+    return (left_stat.st_dev, left_stat.st_ino) == (right_stat.st_dev, right_stat.st_ino)
 
 
 def validate_inputs(args: argparse.Namespace) -> None:
@@ -133,6 +165,15 @@ def validate_inputs(args: argparse.Namespace) -> None:
         if is_within(resolved_profile, resolved_source):
             raise InputValidationError(
                 "profile-dir 不得位于 source_root 内部: "
+                f"{args.profile_dir} (source_root: {source_root})"
+            )
+        anchor = nearest_existing_path(resolved_profile)
+        if anchor is not None and any(
+            is_same_directory(candidate, resolved_source)
+            for candidate in (anchor, *anchor.parents)
+        ):
+            raise InputValidationError(
+                "profile-dir 不得位于 source_root 内部 (firmlink 等价路径): "
                 f"{args.profile_dir} (source_root: {source_root})"
             )
 
@@ -615,6 +656,8 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     成功路径的 stdout 摘要包含 ``duplicate_groups`` 与 ``elapsed_seconds``，
     便于 US-018 真实目录只读验收脚本一次性抓取 13k+ 文件规模下的耗时。
     错误路径在 stderr 单独打印 ``elapsed_seconds``，不混入主摘要。
+    ``--prewarm`` 先做一次不计时的预热遍历再重置计时起点，让
+    ``elapsed_seconds`` 反映热缓存耗时，规模验收不再受冷启动 I/O 抖动影响。
     """
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -627,6 +670,9 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     try:
         validate_inputs(args)
         source_root = args.source_root.expanduser().resolve()
+        if args.prewarm:
+            inventory_local_corpus(source_root, args.max_file_bytes)
+            start = time.monotonic()
         records = inventory_local_corpus(source_root, args.max_file_bytes)
     except (InputValidationError, InventoryError) as exc:
         print(
@@ -697,14 +743,26 @@ def write_manifest_and_review(
       ``references/research/00-source-inventory.md``；绝不写入
       ``source-policy.json`` 或其他 profile 产物。
     - 绝不读取源文件正文；review 中只输出统计与 family 摘要。
+    - ``source_root`` 在入口统一 ``resolve()``：manifest 与 review 记录的
+      路径不随调用方传入的拼法（如 macOS ``/var`` 与 ``/private/var``）漂移。
     """
-    if profile_dir.resolve(strict=False) == source_root:
+    source_root = source_root.expanduser().resolve()
+    resolved_profile = profile_dir.resolve(strict=False)
+    if resolved_profile == source_root:
         raise InputValidationError(
             "profile-dir 不得等于 source_root"
         )
-    if is_within(profile_dir.resolve(strict=False), source_root):
+    if is_within(resolved_profile, source_root):
         raise InputValidationError(
             "profile-dir 不得位于 source_root 内部"
+        )
+    anchor = nearest_existing_path(resolved_profile)
+    if anchor is not None and any(
+        is_same_directory(candidate, source_root)
+        for candidate in (anchor, *anchor.parents)
+    ):
+        raise InputValidationError(
+            "profile-dir 不得位于 source_root 内部 (firmlink 等价路径)"
         )
 
     references_dir = profile_dir / "references"
