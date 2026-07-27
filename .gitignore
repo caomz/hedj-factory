@@ -26,3 +26,4 @@ logs/
 f2-*.log
 *.pyc
 scripts/err.log
+*.bak
