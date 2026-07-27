@@ -69,7 +69,7 @@ if [ -z "$SAU_DIR" ] || [ ! -x "$SAU_DIR/.venv/bin/sau" ]; then
 fi
 if [ -n "$SAU_DIR" ] && [ -x "$SAU_DIR/.venv/bin/sau" ]; then
   printf "%s\n" "$SAU_DIR" > "$STATE_DIR/sau_dir"
-  ok "social-auto-upload（sau）— $SAU_DIR（已记到 ~/.hedj-factory/sau_dir；Step 6 一键发抖音/小红书/视频号可用，发前记得先 sau <平台> check）"
+  ok "social-auto-upload（sau）— ${SAU_DIR}（已记到 ~/.hedj-factory/sau_dir；Step 6 一键发抖音/小红书/视频号可用，发前记得先 sau <平台> check）"
 else
   warn "social-auto-upload 没装：不影响前面，只有走到 Step 6 一键发号才需要。公开仓库（github.com/dreammis/social-auto-upload，MIT，需 uv + python3.10~3.12），clone 到任意目录后一段装："
   printf "      git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST=\"https://npmmirror.com/mirrors/playwright\" .venv/bin/patchright install chromium && cp conf.example.py conf.py\n"
