@@ -55,11 +55,11 @@ description: |
 - **抖音作者（全自动）**：`python scripts/take.py douyin <作者主页URL或sec_uid> [--top 20]`
   → 枚举他全部作品 metadata（赞/收藏/评论/文案/id），按点赞排序、跳过已蒸馏的，列成表 + 存 json。
   勾选要的 → `python scripts/take.py dl <works.json> 0,2,5 案例库/<作者>` 下载选中 mp4，再走 Phase 1 转写 + 拆解。
-  一次性配置：cookie 放 `~/.baokuan-factory/secrets.env`（见 `scripts/secrets.example.env`），或 `pip install browser_cookie3` 自动从浏览器取；依赖 `pip install f2`。
+  一次性配置：cookie 放 `~/.hedj-factory/secrets.env`（见 `scripts/secrets.example.env`），或 `pip install browser_cookie3` 自动从浏览器取；依赖 `pip install f2`。
 - **视频号作者（半自动）**：视频号没公开作者目录。先在电脑微信里开 ltaoo/wx_channels_download 本地拦截、滑一遍作者主页，把抓到的 feed 列表存成 json，再 `python scripts/take.py sphfeed <feed.json>` → 同样列表 + 勾选下载。
 - **单条链接（老方式，保留）**：`python scripts/take.py one <抖音视频/视频号分享链> <输出目录>` 自动判别平台下载；也可继续手动按上面单链方式取。
 
-去重表在 `~/.baokuan-factory/state/distilled.json`，下过的 id 自动跳过（`--all` 看全部）。**cookie/sec_uid 等个人敏感配置只进 `~/.baokuan-factory/secrets.env`（仓库外、gitignore），永不提交共享仓库。**
+去重表在 `~/.hedj-factory/state/distilled.json`，下过的 id 自动跳过（`--all` 看全部）。**cookie/sec_uid 等个人敏感配置只进 `~/.hedj-factory/secrets.env`（仓库外、gitignore），永不提交共享仓库。**
 
 ### Phase 1: 转写（用脚本，别手搓）
 

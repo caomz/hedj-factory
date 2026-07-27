@@ -1,4 +1,4 @@
-# 爆款工厂 · 全流程 SOP
+# hedj-factory · 全流程 SOP
 
 两条蒸馏线：一条蒸馏「你自己」（一次性、反复复用），一条蒸馏「别人的爆款」（每条视频跑一遍）。前者作为**口吻 + 品味层**注入后者。
 
@@ -16,7 +16,7 @@
 ║         ├─ 表达 DNA：你的梗 / 节奏 / 高低反差 / 忌讳词                 ║
 ║         ├─ 从夯到拉：你的锐评品味（哪算夯、哪算哈、哪算拉）            ║
 ║         └─ 核心心智模型 + 价值观与反模式                              ║
-║                         │  记到 ~/.baokuan-factory/profile           ║
+║                         │  记到 ~/.hedj-factory/profile           ║
 ╚═════════════════════════╪════════════════════════════════════════════╝
                           │  这一层 = 「口吻 + 品味」，往下游注入两次
 ╔═════════════════════════╪════════════════════════════════════════════╗
@@ -85,8 +85,8 @@
 - **视频号下载**：用 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链 curl 直下。别上 mitmproxy。需要 gstack `/browse` 驱动解析器。
 - **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。whisper 模型复用机器已有的。
 - **gstack `/browse` 怎么装**：`brew` 装不了，但它是**公开仓库**（github.com/garrytan/gstack），**不用找团队要**，自己一行装（需 Bun v1.0+ 和 Git）：`git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`。装完重开一轮生效，升级用 `/gstack-upgrade`。临时不装也能跑：视频号改备选下载、截图手动塞进 `build/news/`。
-- **profile 注入不准**：Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错。重蒸或改标记文件。
-- **发布：social-auto-upload 装法**（Step 6 用，公开仓库 github.com/dreammis/social-auto-upload，MIT）：`cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright" .venv/bin/patchright install chromium && cp conf.example.py conf.py`。之后 `source .venv/bin/activate && sau --help`。
+- **profile 注入不准**：Phase O 蒸馏得糙，或 `~/.hedj-factory/profile` 指错。重蒸或改标记文件。
+- **发布：social-auto-upload 装法**（Step 6 用，公开仓库 github.com/dreammis/social-auto-upload，MIT）：clone 到任意目录：`git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright" .venv/bin/patchright install chromium && cp conf.example.py conf.py`。之后 `source .venv/bin/activate && sau --help`。装完重跑一次本仓库 `./install.sh`，让它把 sau 位置记进 `~/.hedj-factory/sau_dir`（skill 靠这个找到它）。
 - **发布：登录/cookie**：cookie 是平台会话，几天到两周过期，**每次发前先 `sau <平台> check --account <h>`**，`invalid` 就 `sau <平台> login --account <h> --headed` 扫码（抖音扫抖音 App、小红书扫小红书 App、视频号扫微信）。
-- **发布：首次登录报错**是 upstream 已知 bug（fresh clone 会踩）。**最快：打本仓库带的补丁**——`cd ~/Desktop/workplace/social-auto-upload && git apply <baokuan-factory clone>/docs/patches/social-auto-upload-login-fixes.patch`。补丁内容：抖音 `_wait_for_douyin_login` 的 `original_url`/`saw_2fa`/`i` 未定义要补；三平台登录 `page.goto` 加 `timeout=90000, wait_until="domcontentloaded"`；视频号 `_build_launch_kwargs` 把 `channel="chrome"` 改 `"chromium"`、二维码改截微信 OAuth iframe 元素、`_is_tencent_login_completed` 放宽到落 `/platform/*` 即成功。补丁若因上游版本变化打不上，就照这几条手动改。
+- **发布：首次登录报错**是 upstream 已知 bug（fresh clone 会踩）。**最快：打本仓库带的补丁**——`cd "$(cat ~/.hedj-factory/sau_dir)" && git apply <hedj-factory clone>/docs/patches/social-auto-upload-login-fixes.patch`。补丁内容：抖音 `_wait_for_douyin_login` 的 `original_url`/`saw_2fa`/`i` 未定义要补；三平台登录 `page.goto` 加 `timeout=90000, wait_until="domcontentloaded"`；视频号 `_build_launch_kwargs` 把 `channel="chrome"` 改 `"chromium"`、二维码改截微信 OAuth iframe 元素、`_is_tencent_login_completed` 放宽到落 `/platform/*` 即成功。补丁若因上游版本变化打不上，就照这几条手动改。
 - **发布：视频号图文发不了**：`sau tencent` 只有 `upload-video`（图文是骨架 `NotImplementedError`）；抖音/小红书图文用 `upload-note`。

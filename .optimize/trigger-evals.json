@@ -2,7 +2,7 @@
   {"query": "我们团队这周新进了三个做内容的同事，帮我把那套爆款翻拍的流程给他们搭起来，从装 skill 到蒸馏他们自己的风格，一步步带", "should_trigger": true},
   {"query": "我想翻拍这条抖音 https://www.douyin.com/video/7508696238196280614 ，做成我自己口吻的成片，再配抖音小红书视频号X四个平台的文案", "should_trigger": true},
   {"query": "从对标视频到成片到发布文案，帮我完整走一遍，我要系统化做翻拍号", "should_trigger": true},
-  {"query": "我是新来的，这个爆款工厂到底咋用，带我从头跑一遍呗", "should_trigger": true},
+  {"query": "我是新来的，这个 hedj-factory 到底咋用，带我从头跑一遍呗", "should_trigger": true},
   {"query": "把这个博主的爆款 https://weixin.qq.com/sph/AVaCWsnAgi 变成我能直接发的版本，要带我的人设和风格", "should_trigger": true},
   {"query": "先用女娲把我自己蒸馏出来当 onboarding，然后我准备开始批量翻拍几个对标号", "should_trigger": true},
   {"query": "装一下你们那套爆款翻拍的 skill 集合，我 clone 下来了不知道下一步", "should_trigger": true},

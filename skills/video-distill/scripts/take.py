@@ -8,15 +8,15 @@
 #   python take.py dl <works.json> <序号,逗号分隔> <输出目录>           # 下载选中的作品到 案例库/<...>
 #   python take.py one <单条链接> <输出目录>                           # 单链：抖音视频 / 视频号分享链 自动判别下载
 #
-# 依赖：抖音枚举要 `pip install f2`；cookie 放 ~/.baokuan-factory/secrets.env(DOUYIN_COOKIE=...)，
+# 依赖：抖音枚举要 `pip install f2`；cookie 放 ~/.hedj-factory/secrets.env(DOUYIN_COOKIE=...)，
 #       没有就试浏览器自动取(需登录抖音)。视频号用在线解析器 sph.litao.workers.dev。
-# 去重：已蒸馏的 id 记在 ~/.baokuan-factory/state/distilled.json，枚举时自动跳过(--all 显示全部)。
+# 去重：已蒸馏的 id 记在 ~/.hedj-factory/state/distilled.json，枚举时自动跳过(--all 显示全部)。
 import sys, os, json, re, subprocess, pathlib, asyncio
 
-STATE = pathlib.Path.home() / ".baokuan-factory" / "state"
+STATE = pathlib.Path.home() / ".hedj-factory" / "state"
 STATE.mkdir(parents=True, exist_ok=True)
 REGISTRY = STATE / "distilled.json"
-SECRETS = pathlib.Path.home() / ".baokuan-factory" / "secrets.env"
+SECRETS = pathlib.Path.home() / ".hedj-factory" / "secrets.env"
 
 def load_secrets():
     env = {}
@@ -65,7 +65,7 @@ async def douyin_enum(url_or_uid, top, show_all):
     cookie = douyin_cookie()
     if not cookie:
         print("❌ 没拿到抖音 cookie。两选一：\n"
-              "   a) 把 DOUYIN_COOKIE=... 写进 ~/.baokuan-factory/secrets.env\n"
+              "   a) 把 DOUYIN_COOKIE=... 写进 ~/.hedj-factory/secrets.env\n"
               "   b) 在 Safari/Chrome 登录抖音,装 `pip install browser_cookie3` 自动取", file=sys.stderr)
         sys.exit(2)
     sec = url_or_uid

@@ -1,4 +1,4 @@
-爆款工厂：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案"的一条龙总入口。串起四件事——①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③hyperframes 把翻拍稿做成成片 ④四平台爆款文案。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / hyperframes，并在翻拍和文案两处注入你自己的 profile。
+hedj-factory（内容机器）：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案"的一条龙总入口。串起四件事——①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③hyperframes 把翻拍稿做成成片 ④四平台爆款文案。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / hyperframes，并在翻拍和文案两处注入你自己的 profile。
 什么时候用（要 pushy 一点别漏触发，但只在"整条链路 / 团队上手"时当入口）：
 - 团队新人 onboarding，"装一下 / clone 了这套爆款翻拍 skill 不知道下一步 / 怎么开始用 / 要不要装依赖"——本 skill 亲自带 onboarding（查依赖 + 用女娲蒸馏你自己），别只顾自己跑 bash。
 - "我要开始做爆款翻拍 / 搭翻拍流程 / 从对标视频到成片到文案走一遍 / 系统化做翻拍号"。

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# baokuan-factory installer — symlinks the bundled skills into ~/.claude/skills/
+# hedj-factory installer — symlinks the bundled skills into ~/.claude/skills/
 # and checks for the external tools the pipeline needs.
 #
 # 为什么 symlink 不 cp：① 改源即时生效，不用反复 reinstall；② 别的安装器（如 gstack
@@ -14,15 +14,22 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$HERE/skills"
 DEST="$HOME/.claude/skills"
+STATE_DIR="$HOME/.hedj-factory"   # 状态目录：仓库位置 / profile 标记 / sau 位置 / secrets / 备份
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
+
+# 旧版迁移：项目改名前状态目录叫 ~/.baokuan-factory，整个搬过来（repo/profile/secrets/去重表全保留）
+if [ -d "$HOME/.baokuan-factory" ] && [ ! -e "$STATE_DIR" ]; then
+  mv "$HOME/.baokuan-factory" "$STATE_DIR"
+fi
+mkdir -p "$STATE_DIR"
 
 bold() { printf "\033[1m%s\033[0m\n" "$1"; }
 ok()   { printf "  \033[32m✓\033[0m %s\n" "$1"; }
 warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 err()  { printf "  \033[31m✗\033[0m %s\n" "$1"; }
 
-bold "爆款工厂 · baokuan-factory installer"
+bold "hedj-factory installer"
 echo
 
 # --- 1. dependency check (report only, never auto-install) -------------------
@@ -52,13 +59,21 @@ else
   warn "（装完重开一轮 Claude Code 生效；临时不装也能跑：视频号改备选下载、截图手动塞进 build/news/）"
 fi
 # 软依赖（最后一环 · 发布）：social-auto-upload（sau CLI）。公开仓库，单独装，只有 Step 6 一键发号才用；不装不影响成片+文案。
-SAU_DIR="$HOME/Desktop/workplace/social-auto-upload"
-if [ -x "$SAU_DIR/.venv/bin/sau" ]; then
-  ok "social-auto-upload（sau）— 已装（Step 6 一键发抖音/小红书/视频号可用；发前记得先 sau <平台> check）"
+# clone 在哪都行：优先 $SAU_DIR 环境变量，其次上次记下的位置，最后扫几个常见目录；找到就记进 ~/.hedj-factory/sau_dir 给 skill 用。
+SAU_DIR="${SAU_DIR:-}"
+[ -z "$SAU_DIR" ] && [ -f "$STATE_DIR/sau_dir" ] && SAU_DIR="$(cat "$STATE_DIR/sau_dir" 2>/dev/null || true)"
+if [ -z "$SAU_DIR" ] || [ ! -x "$SAU_DIR/.venv/bin/sau" ]; then
+  for c in "$HOME/social-auto-upload" "$HOME/workplace/social-auto-upload" "$HOME/Desktop/workplace/social-auto-upload" "$(dirname "$HERE")/social-auto-upload"; do
+    if [ -x "$c/.venv/bin/sau" ]; then SAU_DIR="$c"; break; fi
+  done
+fi
+if [ -n "$SAU_DIR" ] && [ -x "$SAU_DIR/.venv/bin/sau" ]; then
+  printf "%s\n" "$SAU_DIR" > "$STATE_DIR/sau_dir"
+  ok "social-auto-upload（sau）— $SAU_DIR（已记到 ~/.hedj-factory/sau_dir；Step 6 一键发抖音/小红书/视频号可用，发前记得先 sau <平台> check）"
 else
-  warn "social-auto-upload 没装：不影响前面，只有走到 Step 6 一键发号才需要。公开仓库（github.com/dreammis/social-auto-upload，MIT，需 uv + python3.10~3.12），一段装："
-  printf "      cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST=\"https://npmmirror.com/mirrors/playwright\" .venv/bin/patchright install chromium && cp conf.example.py conf.py\n"
-  warn "（装完各平台 sau <平台> login --account <你> --headed 扫码；首次登录若报错见 docs/SOP.md 排错「发布」）"
+  warn "social-auto-upload 没装：不影响前面，只有走到 Step 6 一键发号才需要。公开仓库（github.com/dreammis/social-auto-upload，MIT，需 uv + python3.10~3.12），clone 到任意目录后一段装："
+  printf "      git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-upload && uv venv --python 3.12 && uv pip install -e . && PLAYWRIGHT_DOWNLOAD_HOST=\"https://npmmirror.com/mirrors/playwright\" .venv/bin/patchright install chromium && cp conf.example.py conf.py\n"
+  warn "（装完重跑一次 ./install.sh 让它记下位置，或手动 echo <绝对路径> > ~/.hedj-factory/sau_dir；各平台 sau <平台> login --account <你> --headed 扫码；首次登录若报错见 docs/SOP.md 排错「发布」）"
 fi
 echo
 
@@ -67,7 +82,13 @@ bold "2) 安装 skills 到 $DEST"
 mkdir -p "$DEST"
 TS="$(date +%Y%m%d-%H%M%S)"
 # 备份放到 skills 目录【外面】——放里面的话，带 SKILL.md 的备份会被当成一个幽灵重复 skill 加载。
-BAK="$HOME/.baokuan-factory/backups/$TS"
+BAK="$STATE_DIR/backups/$TS"
+# 旧版迁移：skill 目录改名 baokuan-factory → hedj-factory 后，老安装会留一个旧名 symlink/拷贝，清掉防幽灵重复
+if [ -L "$DEST/baokuan-factory" ]; then
+  rm -f "$DEST/baokuan-factory"; ok "baokuan-factory（旧名 symlink 已移除，现在叫 hedj-factory）"
+elif [ -e "$DEST/baokuan-factory" ]; then
+  mkdir -p "$BAK"; mv "$DEST/baokuan-factory" "$BAK/baokuan-factory"; ok "baokuan-factory（旧名拷贝已备份移除，现在叫 hedj-factory）"
+fi
 for d in "$SRC"/*/; do
   name="$(basename "$d")"
   target="$DEST/$name"
@@ -86,7 +107,7 @@ for d in "$SRC"/*/; do
     # 真目录/拷贝 → 备份后换成 symlink（治本：gstack 再清洗也冲不掉，改源即时生效）
     mkdir -p "$BAK"; mv "$target" "$BAK/${name}"
     ln -s "$link_to" "$target"
-    ok "${name}（拷贝→已备份到 ~/.baokuan-factory/backups/${TS}/，改为 symlink）"
+    ok "${name}（拷贝→已备份到 ~/.hedj-factory/backups/${TS}/，改为 symlink）"
   else
     ln -s "$link_to" "$target"; ok "${name}（symlink）"
   fi
@@ -94,16 +115,15 @@ done
 echo
 
 # --- 3. record repo location (lets the skill auto-pull latest on every use) ---
-mkdir -p "$HOME/.baokuan-factory"
-printf "%s\n" "$HERE" > "$HOME/.baokuan-factory/repo"
-ok "记下仓库位置 → ~/.baokuan-factory/repo（之后每次用 skill 会自动从这里拉最新）"
+printf "%s\n" "$HERE" > "$STATE_DIR/repo"
+ok "记下仓库位置 → ~/.hedj-factory/repo（之后每次用 skill 会自动从这里拉最新）"
 echo
 
 # --- 4. next steps -----------------------------------------------------------
 bold "4) 装好了。下一步："
 cat <<'EOF'
   在 Claude Code 里说一句任意触发：
-    · 第一次用 → "用爆款工厂帮我 onboarding"（会先装/查依赖 + 用女娲蒸馏你自己）
+    · 第一次用 → "用 hedj-factory 帮我 onboarding"（会先装/查依赖 + 用女娲蒸馏你自己）
     · 翻拍一条 → "我要翻拍这条视频 <对标链接>，做成我自己口吻的成片和文案"
     · 发出去   → "把这条成片发到抖音/小红书/视频号"（Step 6，会先 check 登录、发前跟你确认）
 

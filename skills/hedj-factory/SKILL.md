@@ -1,7 +1,7 @@
 ---
-name: baokuan-factory
+name: hedj-factory
 description: |
-  爆款工厂：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案 + 一键发号"的一条龙总入口。串起五件事:①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③talking-head-edit（口播）/hyperframes（图文混剪）把翻拍稿/录音做成成片 ④四平台爆款文案 ⑤social-auto-upload 把成片+文案一键发到抖音/小红书/视频号。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / talking-head-edit / hyperframes / social-auto-upload(sau CLI)，并在翻拍和文案两处注入你自己的 profile。
+  hedj-factory（内容机器）：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案 + 一键发号"的一条龙总入口。串起五件事:①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③talking-head-edit（口播）/hyperframes（图文混剪）把翻拍稿/录音做成成片 ④四平台爆款文案 ⑤social-auto-upload 把成片+文案一键发到抖音/小红书/视频号。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / talking-head-edit / hyperframes / social-auto-upload(sau CLI)，并在翻拍和文案两处注入你自己的 profile。
   什么时候用（要 pushy 一点别漏触发，但只在"整条链路 / 团队上手"时当入口）：
   - 团队新人 onboarding，"装一下 / clone 了这套爆款翻拍 skill 不知道下一步 / 怎么开始用 / 要不要装依赖"——本 skill 亲自带 onboarding（查依赖 + 用女娲蒸馏你自己），别只顾自己跑 bash。
   - "我要开始做爆款翻拍 / 搭翻拍流程 / 从对标视频到成片到文案到发号走一遍 / 系统化做翻拍号"。
@@ -10,7 +10,7 @@ description: |
   边界（守住精度）：如果用户只要其中一步（只下载 / 只转写提字幕 / 只拆解一条视频结构 / 只写某平台文案标题 / 只蒸馏某个别人 / 只把一条现成的片发到某平台），那分别是 video-distill / nuwa-skill / hyperframes / social-auto-upload 的活，别抢；本 skill 只在要走完整链路或团队 onboarding 时当总入口。
 ---
 
-# 爆款工厂 · Baokuan Factory
+# hedj-factory · 内容机器
 
 > 一句话：把**别人的爆款**变成**你自己口吻的成片 + 全平台文案**的一条龙。
 > 你（Claude）在这里是**总调度**，不是亲自干所有活。每一步都委派给对应子 skill，本 skill 只负责**顺序、衔接、和把"用户自己的 profile"注入到该注入的地方**。
@@ -41,12 +41,12 @@ description: |
 **每次触发本 skill，动手前先跑一次同步**，把团队公共仓库拉到最新再开工——这样谁改了引擎/拆解套路/卡片样式，全队下一次用就自动拿到，不会各人跑各人的旧版：
 
 ```bash
-bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
+bash ~/.claude/skills/hedj-factory/scripts/sync.sh
 ```
 
 它**永不阻塞**:离线 / 没装过 / 有本地改动 → 打一行提示就退，用当前版本继续。只有真拉到新 commit 才会重装（"已是最新"是 1 秒空操作）。看到它说"拉到更新…已更新到最新"，就知道这次用的是最新版；本次更新下次触发才完全生效（当前对话已加载旧 SKILL.md），如果它报告有重大更新，可提示用户重开一轮。
 
-> 为什么放第 0 步：这套是给团队用的，引擎和套路一直在迭代。靠每人记得手动 `git pull` 必然有人落后；把"先同步"焊死在每次开工的第一步，才能保证全队跑同一个版本。标记文件 `~/.baokuan-factory/repo` 由 `install.sh` 写入，sync 靠它找到仓库。
+> 为什么放第 0 步：这套是给团队用的，引擎和套路一直在迭代。靠每人记得手动 `git pull` 必然有人落后；把"先同步"焊死在每次开工的第一步，才能保证全队跑同一个版本。标记文件 `~/.hedj-factory/repo` 由 `install.sh` 写入，sync 靠它找到仓库。
 
 ## 然后：判断用户在哪一步（决策树）
 
@@ -59,12 +59,12 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
      git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup
      ```
      `./setup` 会把 `/browse` 等装进 `~/.claude/skills/`,**装完重开一轮 Claude Code** 才生效(当前会话已加载旧 skill 列表)。**临时不装也能跑**:视频号取片改备选工具(video-distill Phase 0 列了 `wx_channels_download`),抓截图改手动塞——让用户把权威截图存进本片 `build/news/`,你再套卡片。`install.sh` 也会顺带报它在不在、并打这条命令。详见排错区「没 gstack」。
-   - **发布环节(Step 6)才需要的：social-auto-upload（`sau` CLI）**。检查 `~/Desktop/workplace/social-auto-upload` 在不在、`sau --help` 通不通。**没装不影响前面**——成片+文案照跑，只有真要一键发号时才装。装法见依赖区「发布：social-auto-upload」。
-3. **蒸馏过自己吗？** 读 `~/.baokuan-factory/profile`（一行，指向用户自己的 profile SKILL.md 路径）。
+   - **发布环节(Step 6)才需要的：social-auto-upload（`sau` CLI）**。检查 `~/.hedj-factory/sau_dir` 在不在、里面记的目录下 `.venv/bin/sau --help` 通不通（install.sh 找到 sau 时会写这个标记）。**没装不影响前面**——成片+文案照跑，只有真要一键发号时才装。装法见依赖区「发布：social-auto-upload」。
+3. **蒸馏过自己吗？** 读 `~/.hedj-factory/profile`（一行，指向用户自己的 profile SKILL.md 路径）。
    - 文件不存在或指向的文件不在 → 走 **Phase O**（一次性 onboarding）。
    - 存在且有效 → 直接进 **Phase 1**，把该 profile 当注入源。
 
-> 为什么用 `~/.baokuan-factory/profile` 这个标记文件：每个同事翻拍时都要注入**他自己**的口吻，机器上可能蒸馏过好几个人（对标对象也会被蒸馏）。用一个显式标记记住"我是谁"，避免每次猜或问。
+> 为什么用 `~/.hedj-factory/profile` 这个标记文件：每个同事翻拍时都要注入**他自己**的口吻，机器上可能蒸馏过好几个人（对标对象也会被蒸馏）。用一个显式标记记住"我是谁"，避免每次猜或问。
 
 ## Phase O · 第一次：蒸馏你自己（一次性，约 15-30 分钟）
 
@@ -74,8 +74,8 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 2. 调用 **nuwa-skill**，让它蒸馏**用户自己**：把素材链接喂进去，按女娲的「蒸馏用户自己」路径走（女娲 SKILL.md 里有这个特殊场景）。
 3. 产物落在仓库 `skills/<handle>/`。蒸馏完，把路径写进标记文件：
    ```bash
-   mkdir -p ~/.baokuan-factory
-   echo "<绝对路径>/skills/<handle>/SKILL.md" > ~/.baokuan-factory/profile
+   mkdir -p ~/.hedj-factory
+   echo "<绝对路径>/skills/<handle>/SKILL.md" > ~/.hedj-factory/profile
    ```
 4. 跟用户确认：核心心智模型、表达DNA、从夯到拉品味是否像本人。不像就让 nuwa 再精炼一轮（女娲有「更新已有 Skill」流程）。
 
@@ -92,7 +92,7 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 - 这一步是**中性**的——跟用户是谁无关，先把"它为什么火"拆干净。
 
 **Step 2 · 翻拍角度**（video-distill Phase 4）← **注入① 品味**
-- 先 `Read ~/.baokuan-factory/profile` 指向的用户 profile，重点读「核心心智模型」「从夯到拉/评分品味」。
+- 先 `Read ~/.hedj-factory/profile` 指向的用户 profile，重点读「核心心智模型」「从夯到拉/评分品味」。
 - 用它给原视频每个论点打档（夯/哈/拉），定翻拍打法：正着翻、反着锐评、还是元视频。写进 `拆解.md` 的「翻拍角度」节。
 - 落差就在这：注入的是**立场**——用户站哪、锐评什么。
 - ⚠️ 这步只产出**角度/立场**(写进 `拆解.md`),**不是翻拍稿**。别在这里停手就去成片。
@@ -124,7 +124,7 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
 - 目标：把 `口播/<片名>/` 的终版成片，配 Step 5 的 `平台文案.md`，发到**抖音 / 小红书 / 视频号**。
 - ⚠️ **发布是对外、不可逆的动作（发出去就公开了，删了也可能被缓存/推送）。动手发之前必须把"发哪个号、哪几个平台、标题正文、立即发还是定时"逐条念给用户确认，得到明确"发"才发。**能定时/存草稿就别默认立即发。绝不自作主张群发。
 - **引擎/真源**：细节 CLI 契约不在本 skill 复制，去读装好的 social-auto-upload 仓库 `docs/CLI.md` 和 `skills/{douyin,xiaohongshu}-upload/`。原理：真浏览器自动化（patchright 驱动 Chromium 模拟真人在创作者后台传，不是私有 API/抓包），所以**要先扫码登录、cookie 会过期**。
-- 跑命令前先进仓库激活环境：`cd ~/Desktop/workplace/social-auto-upload && source .venv/bin/activate`。约定 `--account <handle>`（一个号一份 cookie，如 `kaiwen`）。
+- 跑命令前先进仓库激活环境：`cd "$(cat ~/.hedj-factory/sau_dir)" && source .venv/bin/activate`（sau 仓库位置由 install.sh 探测后记在 `~/.hedj-factory/sau_dir`；这文件不在就是没装或没探测到——装好后重跑 `./install.sh`，或手动 `echo <绝对路径> > ~/.hedj-factory/sau_dir`）。约定 `--account <handle>`（一个号一份 cookie，如 `kaiwen`）。
 - **三步：**
   1. **先查登录态**（cookie 几天到两周会过期，别盲发）：`sau douyin check --account <h>` / `sau xiaohongshu check --account <h>` / `sau tencent check --account <h>`。返回 `invalid` 就重新扫码：`sau <平台> login --account <h> --headed`（douyin 扫抖音 App、xiaohongshu 扫小红书 App、tencent 扫微信；二维码窗口会弹出）。
   2. **传视频**（标题/简介/话题从 `平台文案.md` 对应平台那份取。⚠️ 成片在工作区 `口播/<片名>/` 树里，不在 sau 仓库里，`--file` 给**成片的绝对路径**，别用相对路径）：
@@ -185,15 +185,15 @@ bash ~/.claude/skills/baokuan-factory/scripts/sync.sh
   `./setup` 会把 `/browse` 等装进 `~/.claude/skills/`，**装完重开一轮 Claude Code** 生效；升级用 `/gstack-upgrade`。**临时没有照样能跑**：视频号取片改备选下载工具，截图让用户手动塞进 `build/news/`，别因此跳过素材或拿空卡糊弄。
 - **拆完没有"翻拍稿"、没法成片**：这是最常见的断链——别跳过 **Step 3 写翻拍稿**（产出 `口播/<片名>/翻拍稿.md`）。「翻拍角度」只是立场，不是能念的稿。
 - **没卡片/没截图**：八成是上一条（没翻拍稿就没录音、talking-head-edit 没被触发），或没 `/browse`。先补翻拍稿、补素材，再成片。
-- **profile 注入不准**：八成是 Phase O 蒸馏得糙，或 `~/.baokuan-factory/profile` 指错了。重蒸或改标记文件。
-- **发布：social-auto-upload 装法**（Step 6 用，外部公开仓库 github.com/dreammis/social-auto-upload，MIT，`brew` 装不了，自己装。需 `uv` + `python3.10~3.12`）：
+- **profile 注入不准**：八成是 Phase O 蒸馏得糙，或 `~/.hedj-factory/profile` 指错了。重蒸或改标记文件。
+- **发布：social-auto-upload 装法**（Step 6 用，外部公开仓库 github.com/dreammis/social-auto-upload，MIT，`brew` 装不了，自己装。需 `uv` + `python3.10~3.12`。clone 到任意目录都行）：
   ```
-  cd ~/Desktop/workplace && git clone https://github.com/dreammis/social-auto-upload.git
+  git clone https://github.com/dreammis/social-auto-upload.git
   cd social-auto-upload && uv venv --python 3.12 && uv pip install -e .          # 注册 sau 命令
   PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright" .venv/bin/patchright install chromium
   cp conf.example.py conf.py
   ```
-  验证 `source .venv/bin/activate && sau --help`。三个平台各扫一次码登录后才能发（见 Step 6）。
+  验证 `source .venv/bin/activate && sau --help`。装完重跑一次 hedj-factory 仓库的 `./install.sh` 让它把位置记进 `~/.hedj-factory/sau_dir`（或手动 `echo "$PWD" > ~/.hedj-factory/sau_dir`）。三个平台各扫一次码登录后才能发（见 Step 6）。
 - **发布：cookie 失效/发不出去**：先 `sau <平台> check --account <h>`，`invalid` 就 `sau <平台> login --account <h> --headed` 重新扫码。cookie 是平台自己的会话，几天到两周会过期，**每次发之前先 check**，别盲发。
-- **发布：首次登录报错（upstream 已知 bug，本机已打补丁）**：官方仓库的登录代码有几处真 bug，fresh clone 会踩，需同样补丁（或维护带补丁的 fork）：① 抖音 `uploader/douyin_uploader/main.py` 的 `_wait_for_douyin_login` 用了未定义的 `original_url`/`saw_2fa`/`i`，秒崩 `NameError`，要在循环前补 `original_url=page.url`、`saw_2fa=False`，并把 `for _ in range` 改 `for i in range`；② douyin/xiaohongshu/tencent 三处登录 `page.goto` 加 `timeout=90000, wait_until="domcontentloaded"`（默认 30s 常超时）；③ 视频号 `uploader/tencent_uploader/main.py` 要改三处：`_build_launch_kwargs` 的 `channel="chrome"` 改 `"chromium"`、二维码改「截主页面里的微信 OAuth iframe 元素」（新版码在 open.weixin.qq.com/connect/qrconnect 的 iframe 里、src 是 URL 不是 data:image）、`_is_tencent_login_completed` 放宽到「落 `/platform/*` 且无登录 iframe 即成功」（微信登录后落 `/platform/home` 不是 `post/create`）。**最快修法：打本仓库带的补丁** `cd ~/Desktop/workplace/social-auto-upload && git apply <baokuan-factory clone>/docs/patches/social-auto-upload-login-fixes.patch`（打不上就照上面几条手改）。CLI 内置扫码窗口只等约 2 分钟太短，急的话直接调 `xxx_cookie_gen(account_file, headless=False, poll_interval=3, max_checks=200)` 给 10 分钟。
+- **发布：首次登录报错（upstream 已知 bug，本机已打补丁）**：官方仓库的登录代码有几处真 bug，fresh clone 会踩，需同样补丁（或维护带补丁的 fork）：① 抖音 `uploader/douyin_uploader/main.py` 的 `_wait_for_douyin_login` 用了未定义的 `original_url`/`saw_2fa`/`i`，秒崩 `NameError`，要在循环前补 `original_url=page.url`、`saw_2fa=False`，并把 `for _ in range` 改 `for i in range`；② douyin/xiaohongshu/tencent 三处登录 `page.goto` 加 `timeout=90000, wait_until="domcontentloaded"`（默认 30s 常超时）；③ 视频号 `uploader/tencent_uploader/main.py` 要改三处：`_build_launch_kwargs` 的 `channel="chrome"` 改 `"chromium"`、二维码改「截主页面里的微信 OAuth iframe 元素」（新版码在 open.weixin.qq.com/connect/qrconnect 的 iframe 里、src 是 URL 不是 data:image）、`_is_tencent_login_completed` 放宽到「落 `/platform/*` 且无登录 iframe 即成功」（微信登录后落 `/platform/home` 不是 `post/create`）。**最快修法：打本仓库带的补丁** `cd "$(cat ~/.hedj-factory/sau_dir)" && git apply <hedj-factory clone>/docs/patches/social-auto-upload-login-fixes.patch`（打不上就照上面几条手改）。CLI 内置扫码窗口只等约 2 分钟太短，急的话直接调 `xxx_cookie_gen(account_file, headless=False, poll_interval=3, max_checks=200)` 给 10 分钟。
 - **发布：视频号图文发不了**：`sau tencent` 只有 `upload-video`，图文（`TencentNote`）是骨架会 `NotImplementedError`，**别答应用户用 sau 发视频号图文**；抖音/小红书图文正常（`upload-note`）。

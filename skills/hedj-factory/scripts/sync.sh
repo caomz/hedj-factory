@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# baokuan-factory · 开工前自动同步
-# 每次触发 baokuan-factory 时先跑这个:把团队公共仓库拉到最新,有更新就重装 skills。
+# hedj-factory · 开工前自动同步
+# 每次触发 hedj-factory 时先跑这个:把团队公共仓库拉到最新,有更新就重装 skills。
 # 设计原则:**永不阻塞**。离线 / 没仓库 / 有本地改动 / 冲突 → 打一行提示就退,用当前版本继续干活。
 #
-# 怎么找到仓库:install.sh 安装时把仓库根路径写进了 ~/.baokuan-factory/repo。
+# 怎么找到仓库:install.sh 安装时把仓库根路径写进了 ~/.hedj-factory/repo。
 # 怎么避免每次都重装:只有 git pull 真的移动了 HEAD 才重装,"已是最新"是个 1 秒空操作,不会刷一堆 .bak 备份。
 set -uo pipefail
 
-MARK="$HOME/.baokuan-factory/repo"
+MARK="$HOME/.hedj-factory/repo"
 say() { printf "[sync] %s\n" "$1"; }
 
 if [ ! -f "$MARK" ]; then

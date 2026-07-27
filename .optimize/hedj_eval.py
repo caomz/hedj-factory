@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Faithful triggering harness for baokuan-factory.
+"""Faithful triggering harness for hedj-factory.
 
 Writes a candidate description into the REAL installed skill, then for each query
 runs `claude -p` and records which skill claude picks FIRST (killing the process
 the moment it decides, so it's fast and never executes the pipeline).
 
-Goal: should_trigger=True  -> first skill should be baokuan-factory
-      should_trigger=False -> first skill should be anything-but baokuan-factory
+Goal: should_trigger=True  -> first skill should be hedj-factory
+      should_trigger=False -> first skill should be anything-but hedj-factory
 """
 import json, os, re, select, subprocess, sys, time, concurrent.futures as cf
 
-SKILL_MD = os.path.expanduser("~/.claude/skills/baokuan-factory/SKILL.md")
+SKILL_MD = os.path.expanduser("~/.claude/skills/hedj-factory/SKILL.md")
 MODEL = "claude-opus-4-8"
-RUNS = int(os.environ.get("BKF_RUNS", "2"))
+RUNS = int(os.environ.get("HEDJ_RUNS", "2"))
 TIMEOUT = 70
 
 def set_description(desc):
@@ -26,7 +26,7 @@ def first_skill(query):
     cmd = ["claude","-p",query,"--output-format","stream-json","--verbose",
            "--include-partial-messages","--model",MODEL]
     env = {k:v for k,v in os.environ.items() if k!="CLAUDECODE"}
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, cwd="/tmp/bkf-opt")
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, cwd="/tmp/hedj-opt")
     buf=""; pending=None; acc=""; start=time.time()
     def finish(val):
         try: p.kill()
@@ -74,7 +74,7 @@ def run(queries):
     out=[]
     def one(item):
         q=item["query"]; picks=[first_skill(q) for _ in range(RUNS)]
-        rate=sum(1 for x in picks if x=="baokuan-factory")/len(picks)
+        rate=sum(1 for x in picks if x=="hedj-factory")/len(picks)
         return {"query":q,"should":item["should_trigger"],"rate":rate,"picks":picks}
     with cf.ThreadPoolExecutor(max_workers=int(os.environ.get("BKF_WORKERS","3"))) as ex:
         out=list(ex.map(one, queries))

@@ -60,7 +60,7 @@ cd hedj-factory
 # 要覆盖已存在的同名 skill:./install.sh --force
 ```
 
-> `install.sh` 会把仓库路径写进 `~/.baokuan-factory/repo`。装在哪个目录都行,但**别装完就把这个 clone 删了**,之后「自动拉最新」靠它。
+> `install.sh` 会把仓库路径写进 `~/.hedj-factory/repo`。装在哪个目录都行,但**别装完就把这个 clone 删了**,之后「自动拉最新」靠它。
 
 **依赖**(install.sh 会检查,缺了给你 brew 命令):`ffmpeg`、`whisper-cpp`、`yt-dlp`、`python3`、`bun`。
 

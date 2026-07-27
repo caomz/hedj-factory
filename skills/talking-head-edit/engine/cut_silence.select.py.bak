@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+# 静音裁剪：把 >0.5s 的静音段收紧到 ~0.18s 呼吸（每侧留 0.09s 防切到字头字尾），
+# 用 ffmpeg select/aselect 一次重编码出紧凑视频。
+# 关键纪律：**先 trim 再转写 => 字幕/卡片时间天然对齐紧凑时间轴**。
+#   即:先对原片跑本脚本出 <name>_tight.mp4,再把 build/video.mp4 软链到 tight、
+#   重抽 audio.wav、转写,后面所有时间(字幕/widgets/chapters)都长在紧凑时间轴上。
+#   (若已在原时间轴建好了,可改用 silence_keep.json 把各时间戳 remap 过去,数学等价。)
+# 用法：python3 cut_silence.py <原片.mp4> <输出_tight.mp4>
+import subprocess, re, sys, json, pathlib
+
+SRC = sys.argv[1] if len(sys.argv) > 1 else "../video.mp4"
+OUT = sys.argv[2] if len(sys.argv) > 2 else "tight.mp4"
+NOISE = "-40dB"     # 静音判定门限。★必须明显低于"说话平均音量"，否则吃句尾字。
+#   先 `ffmpeg -i SRC -af volumedetect -f null -` 看 mean_volume，门限设到比它再低 ~7dB。
+#   (这条车内录音 mean -33dB,用 -30dB 直接吃了 29 个句尾字;-40dB 才干净。)
+MIN_SIL = 0.6       # 只处理超过 0.6s 的静音
+PAD = 0.20          # 每侧保留 0.20s 呼吸(护住句尾尾音,别设太小)
+FR = 30             # 帧率
+# 教训：句尾词的尾音会掉到门限以下被当成静音切掉(如"怎么这么堵"的"堵")。
+# 把会误切的原始时间窗填进 PROTECT(t0,t1)：落在窗内的静音整段不裁,保住句尾词 + 包袱后停顿。
+PROTECT = []  # 默认空；渲出来发现某句尾被吃了,加一个窗再跑
+
+dur = float(subprocess.run(["ffprobe","-v","error","-show_entries","format=duration",
+      "-of","default=nw=1:nk=1", SRC], capture_output=True, text=True).stdout.strip())
+
+log = subprocess.run(["ffmpeg","-hide_banner","-i",SRC,"-af",
+      f"silencedetect=noise={NOISE}:d={MIN_SIL}","-f","null","-"],
+      capture_output=True, text=True).stderr
+sils = []; cur = None
+for line in log.splitlines():
+    m = re.search(r"silence_start:\s*([\d.]+)", line)
+    if m: cur = float(m.group(1))
+    m = re.search(r"silence_end:\s*([\d.]+)", line)
+    if m and cur is not None:
+        sils.append((cur, float(m.group(1)))); cur = None
+
+def protected(ss, se):
+    return any(not (se < p0 or ss > p1) for p0, p1 in PROTECT)
+remove = []
+for ss, se in sils:
+    if protected(ss, se): continue
+    a, b = ss + PAD, se - PAD
+    if b - a > 0.02: remove.append((a, b))
+
+keep = []; t = 0.0
+for a, b in remove:
+    if a > t: keep.append((t, a))
+    t = max(t, b)
+if t < dur: keep.append((t, dur))
+keep = [(round(a,3), round(b,3)) for a,b in keep if b-a > 0.05]
+
+removed = dur - sum(b-a for a,b in keep)
+print(f"原时长 {dur:.1f}s -> 紧凑 {dur-removed:.1f}s（删掉 {removed:.1f}s，{len(sils)} 段静音，{len(keep)} 个保留段）")
+
+# ★切点量化到帧网格(1/FR),视频半开区间取帧、音频 atrim 采样级精切:
+#   每段视频帧数 = (b-a)*FR 恰好整数 = 音频时长,多段零累积漂移。
+#   (旧版 select/aselect 各自量化,每段随机差十几 ms,50+段后音画肉眼可见错位。)
+q = lambda t: round(t*FR)/FR
+keep = [(q(a), q(b)) for a,b in keep]
+keep = [(a,b) for a,b in keep if b-a >= 1.0/FR]
+half = 0.5/FR
+sel = "+".join(f"between(t,{a-half:.6f},{b-half:.6f})" for a,b in keep)
+vf = f"select='{sel}',setpts=N/{FR}/TB"
+achains = ";".join(f"[0:a]atrim=start={a:.6f}:end={b:.6f},asetpts=PTS-STARTPTS[seg{i}]" for i,(a,b) in enumerate(keep))
+af = achains + ";" + "".join(f"[seg{i}]" for i in range(len(keep))) + f"concat=n={len(keep)}:v=0:a=1[aout]"
+
+pathlib.Path("silence_keep.json").write_text(json.dumps(
+    {"src_dur":dur,"out_dur":round(dur-removed,3),"keep":keep,"noise":NOISE,
+     "min_sil":MIN_SIL,"pad":PAD}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+# ★密关键帧:每 30 帧(1s)一个 I 帧、关掉场景切换插帧,并强制恒定 30fps。
+#   否则 x264 默认 GOP 稀疏(关键帧间隔可达 6s+),hyperframes 渲染时 seek 会失败/画面冻结
+#   （渲染日志报 "sparse keyframes ... seek failures and frame freezing"）。
+cmd = ["ffmpeg","-y","-i",SRC,"-vf",vf,"-filter_complex",af,"-map","0:v","-map","[aout]",
+       "-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",
+       "-r",str(FR),"-g",str(FR),"-keyint_min",str(FR),"-sc_threshold","0",
+       "-c:a","aac","-b:a","192k","-movflags","+faststart", OUT]
+print("ffmpeg 重编码中…")
+r = subprocess.run(cmd, capture_output=True, text=True)
+if r.returncode != 0:
+    print(r.stderr[-2000:]); sys.exit(1)
+print(f"写出 {OUT}")
+print("★剪完必验:抽 tight 音频转写,和原片转写 diff;掉了句尾字 => 门限再调低 5dB 重剪。")
