@@ -4,6 +4,7 @@
 - 主链路：蒸馏个人 profile → 下载/转写/拆解对标视频 → 生成翻拍稿 → 制作成片 → 生成平台文案 → 可选发布。
 - `skills/baokuan-factory/` 只负责端到端编排；单步需求应交给对应的专用 skill，避免总入口吞掉所有请求。
 - 修改前先阅读目标目录的 `SKILL.md`；其中引用的 reference 或 engine 文档是该模块的权威规范。
+- 内容工作区已固定为 `/Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw`。本仓库仅保存 skill 源码与规范，不直接存放 `案例库/`、`口播/` 及大量媒体素材；执行生产链路时应从该外部目录触发 skills。
 
 # Stack And Runtime
 
@@ -60,7 +61,7 @@ npx hyperframes render --quality draft --output draft.mp4
 - Python 优先使用 `pathlib`、UTF-8、`subprocess` 参数数组和显式错误处理；不要用拼接 shell 字符串执行用户输入。
 - Node 脚本保持 ESM/async 风格，清理浏览器或文件服务器资源，并通过 exit code 表达校验失败。
 - `talking-head-edit/engine` 脚本通常以 composition 的 `build/` 为 CWD。不要改成依赖仓库根目录，也不要把单片数据写进 engine。
-- 产物目录约定：拆解放 `案例库/<slug>/`；翻拍稿、`build/`、成片和平台文案放 `口播/<片名>/`。
+- 产物目录约定（基于内容工作区 `/Volumes/WorkSSD/Dev/openclaw_mz/knowledge/raw`）：拆解放 `案例库/<slug>/`；翻拍稿、`build/`、成片和平台文案放 `口播/<片名>/`。
 
 # Testing And Verification
 

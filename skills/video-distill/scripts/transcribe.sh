@@ -7,6 +7,8 @@
 # 设计要点：
 # - 复用机器上已有的 whisper.cpp 模型，绝不重复下载（用户明确踩过这个坑）。
 #   只有一个模型都找不到时，才下载 large-v3-turbo。
+# - 默认非英文场景（典型为中文）排除 *.en.bin 英文专用模型，避免
+#   匹配到 ggml-small.en.bin 这类只懂英文的模型去硬转多语言，得到乱码字幕。
 # - 输出 audio.wav / caption.srt / caption.txt 到输出目录。
 
 set -euo pipefail
@@ -32,6 +34,12 @@ find_model() {
       find "$HOME"/Library/Caches -iname 'ggml-*.bin' 2>/dev/null
     } | grep -v -- '-tiny' || true
   )
+  # 非英文场景（典型为中文）排除 *.en.bin 英文专用模型，
+  # 否则会把只懂英文的模型拿去硬转多语言，输出乱码。
+  case "$LANG" in
+    en) ;;
+    *) candidates=$(echo "$candidates" | grep -v '\.en\.bin' || true) ;;
+  esac
   # 偏好顺序：large-v3-turbo > large > medium > 其它
   for pat in 'large-v3-turbo' 'large-v3' 'large' 'medium'; do
     local hit

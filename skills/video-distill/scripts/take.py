@@ -49,9 +49,26 @@ def douyin_cookie():
     return ""
 
 def douyin_handler(cookie):
+    import f2, os as _os
+    # f2 类体里 msToken 默认值真去 bytedance 拿 token,不读 HTTPS_PROXY 会 SSL 挂;
+    # 把系统代理塞给它,让 token 能拿到、占位/重试都不会报错。
+    _proxy = _os.environ.get("HTTPS_PROXY") or _os.environ.get("https_proxy")
+    if _proxy:
+        from f2.apps.douyin.utils import TokenManager
+        import httpx as _hx
+        def _patched(cls):
+            try:
+                with _hx.Client(proxies=_proxy, timeout=10) as _c:
+                    _r = _c.post("https://mssdk.bytedance.com/web/report",
+                                 json={"magic": "test"},
+                                 headers={"User-Agent": "Mozilla/5.0"})
+                    _t = (_r.text or "").strip().strip('"')
+                    return _t or ""
+            except Exception:
+                return ""
+        TokenManager.gen_real_msToken = classmethod(_patched)
     from f2.apps.douyin.handler import DouyinHandler
     from f2.utils.conf_manager import ConfigManager
-    import f2, os as _os
     conf = ConfigManager(_os.path.join(_os.path.dirname(f2.__file__), "conf/app.yaml")).get_config("douyin")
     conf = dict(conf or {})
     conf["cookie"] = cookie
