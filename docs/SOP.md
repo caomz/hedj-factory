@@ -42,8 +42,8 @@
 ║  线 C · book-narration-video 讲书视频               【每本书一遍】    ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║  Step1 书源+讲书拆解    │  book-narration-video Phase 0-1             ║
-║         文字稿/epub/pdf/摘录 ──► cover.jpg + source.txt              ║
-║         读章节 ──► 拆解.md（骨架/金句/章节要点/讲书角度）             ║
+║         文字稿/epub/pdf/摘录 ──► extract_book.py → 原文.txt          ║
+║         读章节 ──► cover.jpg + source.txt + 拆解.md（骨架/金句）     ║
 ║                         │  〔解读式讲书，非整本朗读；版权纪律见 skill〕║
 ║  Step2 讲书角度    ◄─────┤ 注入①「从夯到拉」品味 = 立场             ║
 ║         给书的论点打 tier，定讲法（顺着讲 / 反着锐评 / 只讲一章）     ║
@@ -71,7 +71,7 @@
 ### 线 C · 讲书视频（book-narration-video）
 
 1. **女娲先蒸馏你自己**（同线 A，若尚未 onboarding）。
-2. **书源 + 讲书拆解**（Phase 0-1）→ `案例库/<book-slug>/`：`cover.jpg` + `source.txt` + `拆解.md`。**解读式讲书**，不是整本朗读；长书只讲 1-3 个核心论点。
+2. **书源 + 讲书拆解**（Phase 0-1）→ `案例库/<book-slug>/`：用 `scripts/extract_book.py` 提取（先 `--list` 再按 `--chapters`/`--pages` 取）→ `原文.txt` + `source.txt` + `cover.jpg` + `拆解.md`。**解读式讲书**，不是整本朗读；长书只讲 1-3 个核心论点。
 3. **讲书角度**（Phase 2）→ **第一次读 profile**：给书的论点打档，定讲法。写进 `拆解.md` 的「讲书角度」节。
 4. **写讲书稿**（Phase 3）→ **`口播/<片名>/讲书稿.md`**。个人元素审计 + 黄金 5 秒 hook + 标记 book/quote/recap 卡锚点。**别跳过，和「讲书角度」不是一回事**。
 5. **成片**（Phase 4）→ 默认 **talking-head-edit**（book 卡密集）；纯旁白走 **hyperframes TTS**。
@@ -115,6 +115,7 @@
 - **拆完没翻拍稿/讲书稿、没法成片**：最常见的断链——别漏 **Step 3 写稿**（`口播/<片名>/翻拍稿.md` 或 `讲书稿.md`）。「翻拍角度/讲书角度」只是立场，不是能念的稿。
 - **讲书 book 卡没书封**：检查 `案例库/<book-slug>/cover.jpg`，build 时复制或软链到 `build/news/`。
 - **讲书和翻拍搞混**：给的是视频链接 → video-distill（线 B）；给的是书/章节 → book-narration-video（线 C）。
+- **书源提取**：`python3 skills/book-narration-video/scripts/extract_book.py 书.epub --list`，再 `--out 案例库/<slug>/ --chapters 2-5`。pdf 优先 `pdftotext`（`brew install poppler`）；冒烟：`bash skills/book-narration-video/scripts/smoke_test.sh`。
 - **没卡片/没截图**：八成是没稿（→没录音→talking-head-edit 没被触发），或没 gstack `/browse`。先补稿、补素材再成片。
 - **视频号下载**：用 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链 curl 直下。别上 mitmproxy。需要 gstack `/browse` 驱动解析器。
 - **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。whisper 模型复用机器已有的。
