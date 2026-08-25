@@ -1,13 +1,14 @@
 ---
 name: hedj-factory
 description: |
-  hedj-factory（内容机器）：把"别人的爆款短视频"变成"你自己口吻的成片 + 全平台文案 + 一键发号"的一条龙总入口。串起五件事:①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款→拆解/翻拍角度 ③talking-head-edit（口播）/hyperframes（图文混剪）把翻拍稿/录音做成成片 ④四平台爆款文案 ⑤social-auto-upload 把成片+文案一键发到抖音/小红书/视频号。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / talking-head-edit / hyperframes / social-auto-upload(sau CLI)，并在翻拍和文案两处注入你自己的 profile。
+  hedj-factory（内容机器）：把"别人的爆款短视频"或"一本书"变成"你自己口吻的成片 + 全平台文案 + 一键发号"的一条龙总入口。串起五件事:①女娲蒸馏你自己的表达DNA（一次性 onboarding）②video-distill 蒸馏对标爆款 / book-narration-video 讲书拆解 ③talking-head-edit（口播）/hyperframes（图文混剪）把翻拍稿/讲书稿/录音做成成片 ④四平台爆款文案 ⑤social-auto-upload 把成片+文案一键发到抖音/小红书/视频号。它是路由器/checklist，按顺序调度 nuwa-skill / video-distill / book-narration-video / talking-head-edit / hyperframes / social-auto-upload(sau CLI)，并在翻拍/讲书和文案两处注入你自己的 profile。
   什么时候用（要 pushy 一点别漏触发，但只在"整条链路 / 团队上手"时当入口）：
   - 团队新人 onboarding，"装一下 / clone 了这套爆款翻拍 skill 不知道下一步 / 怎么开始用 / 要不要装依赖"——本 skill 亲自带 onboarding（查依赖 + 用女娲蒸馏你自己），别只顾自己跑 bash。
   - "我要开始做爆款翻拍 / 搭翻拍流程 / 从对标视频到成片到文案到发号走一遍 / 系统化做翻拍号"。
   - "把这条对标视频（链接或文件）变成我自己口吻的成片和全平台文案，最好直接发出去"——要的是完整产物（成片+文案+上号），不是单步。
+  - "把这本书做成讲书视频 / 说书成片"——输入是书不是视频，走 book-narration-video 线。
   - "先蒸馏我自己再批量翻拍对标号"。
-  边界（守住精度）：如果用户只要其中一步（只下载 / 只转写提字幕 / 只拆解一条视频结构 / 只写某平台文案标题 / 只蒸馏某个别人 / 只把一条现成的片发到某平台），那分别是 video-distill / nuwa-skill / hyperframes / social-auto-upload 的活，别抢；本 skill 只在要走完整链路或团队 onboarding 时当总入口。
+  边界（守住精度）：如果用户只要其中一步（只下载 / 只转写提字幕 / 只拆解一条视频结构 / 只写某平台文案标题 / 只蒸馏某个别人 / 只把一条现成的片发到某平台 / 只要拆书笔记不成片），那分别是 video-distill / book-narration-video / nuwa-skill / hyperframes / social-auto-upload 的活，别抢；本 skill 只在要走完整链路或团队 onboarding 时当总入口。
 ---
 
 # hedj-factory · 内容机器
@@ -25,11 +26,14 @@ description: |
                                                           │ 反复复用，注入下游
 线B（每条视频）video-distill 蒸馏「别人的爆款」
    取片 → 转写 → 拆解 → 翻拍角度◄注入①品味 → 〔录制 → talking-head-edit 口播成片 / hyperframes 图文混剪〕 → 四平台文案◄注入②口吻 → 一键发号（抖音/小红书/视频号）
+线C（每本书）  book-narration-video 讲书
+   书源 → 讲书拆解 → 讲书角度◄注入①品味 → 写讲书稿 → 〔录制 → talking-head-edit（book 卡）/ hyperframes TTS〕 → 四平台文案◄注入②口吻 → 一键发号
 ```
 
 依赖的子 skill / 工具（install.sh 已一并装好子 skill；social-auto-upload 是外部公开仓库，单独装，见依赖区）：
 - **nuwa-skill**（女娲造人）——蒸馏一个人的思维操作系统成一个 Skill。这里用来蒸馏**用户自己**。
 - **video-distill**（视频蒸馏）——取片/转写/拆解/翻拍角度/四平台文案。线B 的主力。
+- **book-narration-video**（讲书视频）——书源/讲书拆解/讲书稿/成片。线C 的主力；文案口吻复用 video-distill Phase 5。
 - **talking-head-edit**（口播剪辑）——把真人出镜录好的口播做成带双语字幕 + 卡片 + 顶部章节条 + 可换主题的成片，内置合成引擎和踩过的坑。**口播号的主力成片工具**。
 - **hyperframes 全家桶**（hyperframes / -cli / -registry / gsap / website-to-hyperframes）——把图文/动画/混剪类做成 HTML 视频合成并渲染（talking-head-edit 底层也用它）。
 - **social-auto-upload**（`sau` CLI，外部公开仓库）——最后一环，把成片+文案一键发到抖音/小红书/视频号。它是**真浏览器自动化**（patchright 驱动 Chromium 模拟真人在创作者后台传，不是私有 API/抓包），所以要先扫码登录、cookie 会过期。见 **Step 6** 和依赖区。
@@ -52,7 +56,7 @@ bash ~/.claude/skills/hedj-factory/scripts/sync.sh
 
 同步完，按顺序自检，落在第一个不满足的地方就从那开始：
 
-1. **装好了吗？** 检查 `~/.claude/skills/` 下是否有 `nuwa-skill`、`video-distill`、`talking-head-edit`、`hyperframes`。缺 → 让用户在仓库根跑 `./install.sh`（或指 README）。
+1. **装好了吗？** 检查 `~/.claude/skills/` 下是否有 `nuwa-skill`、`video-distill`、`book-narration-video`、`talking-head-edit`、`hyperframes`。缺 → 让用户在仓库根跑 `./install.sh`（或指 README）。
 2. **依赖齐吗？** `ffmpeg`、`whisper-cli`、`yt-dlp`、`bun`、`python3`。缺 → `install.sh` 会列出来，提示 `brew install ...`。
    - **还有一个软依赖容易漏:gstack `/browse`**(检查 `~/.claude/skills/gstack` 或 `~/.claude/skills/browse` 在不在)。它管两件事:**取片时驱动视频号解析器**、**成片时抓素材截图**——成片质感的命根子。`brew` 装不了,但**别被"内部包"带偏**:它是**公开仓库**(github.com/garrytan/gstack,MIT),不用找谁要,自己一行装(需 Bun v1.0+ 和 Git;Bun 见上一条):
      ```
@@ -81,7 +85,13 @@ bash ~/.claude/skills/hedj-factory/scripts/sync.sh
 
 > 注意：蒸馏的是**用户自己**，不是对标对象。对标对象的人设如果也想要（比如要模仿某博主），那是另一次 nuwa 蒸馏，存成另一个 handle，别覆盖用户自己的。
 
-## Phase 1..N · 每条对标爆款：拆解 → 翻拍 → 成片 → 文案
+## Phase 1..N · 每条内容：拆解 → 写稿 → 成片 → 文案
+
+**先判输入源**：
+- 用户给的是**书/章节/书摘**（不是视频链接）→ 走 **线C book-narration-video**（下文「讲书分支」）。
+- 用户给的是**对标视频链接/文件** → 走 **线B video-distill**（下文「翻拍分支」）。
+
+### 翻拍分支（线B · video-distill）
 
 每条对标视频独立跑一遍。把用户给的链接/文件交给 **video-distill**，它内部有完整 Phase 0-5；本 skill 的职责是**确保两个注入点不被跳过**、**确保中间真的写出一份「翻拍稿」**（最容易被漏掉的一步），以及在翻拍稿之后接上成片。
 
@@ -137,14 +147,36 @@ bash ~/.claude/skills/hedj-factory/scripts/sync.sh
   3. **平台差异**：**视频号只发得了视频**（`sau tencent` 无 `upload-note`，图文没实现，别答应发视频号图文）；**抖音/小红书视频、图文都行**，图文用 `sau <平台> upload-note --account <h> --images a.png b.png --title "..." --note "正文" --tags "..."`。
 - 发完把每个平台的链接/状态回报给用户；失败先看排错区「发布：登录/cookie/视频号」。
 
+### 讲书分支（线C · book-narration-video）
+
+用户输入是**书**不是**视频**时，调用 **book-narration-video**，它内部有完整 Phase 0-6；本 skill 同样确保两个注入点不被跳过、**确保写出 `讲书稿.md`** 再接成片。
+
+**Step 1 · 书源 + 讲书拆解**（book-narration-video Phase 0-1）
+- 给书名/章节/文字稿。产出 `案例库/<book-slug>/拆解.md` + `cover.jpg` + `source.txt`。
+
+**Step 2 · 讲书角度**（Phase 2）← **注入① 品味**
+- 读 profile，给书的论点打档，定讲书打法。写进 `拆解.md` 的「讲书角度」节。
+
+**Step 3 · 写讲书稿**（Phase 3）← **别跳过**
+- 产物：`口播/<片名>/讲书稿.md`。个人元素审计 + 黄金 5 秒 hook。纪律见 book-narration-video Phase 3。
+
+**Step 4 · 成片**（Phase 4）
+- 口播 → talking-head-edit（**book / quote / recap 卡要密**，规格读 `engine/DESIGN.md`）。
+- 纯旁白 → hyperframes TTS + website-to-hyperframes 式渲染。
+
+**Step 5 · 四平台文案**（Phase 5）← **注入② 口吻**
+- 直接走 video-distill Phase 5 口吻纪律，写进 `口播/<片名>/平台文案.md`。
+
+**Step 6 · 发布**：同翻拍分支 Step 6。
+
 ## 两个注入点（这是本 skill 的命根子，别跳过）
 
 | 步骤 | 读 profile 的哪部分 | 注入的是 | 为什么分开 |
 |------|------------------|---------|-----------|
-| Step 2 翻拍角度 | 核心心智模型 / 从夯到拉品味 | **立场**：站哪、锐评啥、反着做哪点 | 换题材时品味骨架不变 |
+| Step 2 翻拍角度 / 讲书角度 | 核心心智模型 / 从夯到拉品味 | **立场**：站哪、锐评啥、反着做哪点 | 换题材时品味骨架不变 |
 | Step 5 平台文案 | 表达 DNA / 反模式 | **口吻**：梗、节奏、忌讳词 | 换号（如小红书走另一人设）只换这一处 |
 
-（Step 3 写翻拍稿也会读 profile 的「表达 DNA」给稿子定调，但它的产物是**口播脚本**本身，不在这张"注入对比表"里——这张表讲的是同一条拆解换人设复用时只动哪两处。）
+（Step 3 写翻拍稿/讲书稿也会读 profile 的「表达 DNA」给稿子定调，但它的产物是**口播脚本**本身，不在这张"注入对比表"里——这张表讲的是同一条拆解换人设复用时只动哪两处。）
 
 立场和口吻是两回事。拆开注入，才能"同一条拆解，换个人设重新发一遍"而不用重做。
 
@@ -154,13 +186,13 @@ bash ~/.claude/skills/hedj-factory/scripts/sync.sh
 
 ```
 <工作区>/                       # 如 clipping
-├── 案例库/<slug>/             # 【蒸馏树】每条对标视频一个，video-distill 产出
-│   ├── video.mp4              软链原片
-│   ├── audio.wav  caption.srt  caption.txt
+├── 案例库/<slug>/             # 【蒸馏树】每条对标视频或每本书一个
+│   ├── video.mp4              软链原片（视频）或 cover.jpg（书）
+│   ├── audio.wav  caption.srt  caption.txt   # 视频才有
 │   ├── source.txt             来源链接 + 下载方式 + 规格
-│   └── 拆解.md                ★选题/骨架/手法/金句/翻拍角度(立场)
-└── 口播/<片名>/               # 【生产树】每条要做的成片一个，翻拍稿 + 成片在这
-    ├── 翻拍稿.md              ★Step 3 产出：能照着念的逐字脚本
+│   └── 拆解.md                ★选题/骨架/手法/金句/翻拍角度或讲书角度
+└── 口播/<片名>/               # 【生产树】每条要做的成片一个，翻拍稿/讲书稿 + 成片在这
+    ├── 翻拍稿.md / 讲书稿.md  ★Step 3 产出：能照着念的逐字脚本
     ├── build/                talking-head-edit 引擎工作目录
     │   ├── news/  naval/      素材截图 / 真访谈片段
     │   ├── fonts/  groups.full.json  widgets.json  theme.json  chapters.json
@@ -183,7 +215,7 @@ bash ~/.claude/skills/hedj-factory/scripts/sync.sh
   git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup
   ```
   `./setup` 会把 `/browse` 等装进 `~/.claude/skills/`，**装完重开一轮 Claude Code** 生效；升级用 `/gstack-upgrade`。**临时没有照样能跑**：视频号取片改备选下载工具，截图让用户手动塞进 `build/news/`，别因此跳过素材或拿空卡糊弄。
-- **拆完没有"翻拍稿"、没法成片**：这是最常见的断链——别跳过 **Step 3 写翻拍稿**（产出 `口播/<片名>/翻拍稿.md`）。「翻拍角度」只是立场，不是能念的稿。
+- **拆完没有"翻拍稿/讲书稿"、没法成片**：这是最常见的断链——别跳过 **Step 3 写稿**（产出 `口播/<片名>/翻拍稿.md` 或 `讲书稿.md`）。「翻拍角度/讲书角度」只是立场，不是能念的稿。
 - **没卡片/没截图**：八成是上一条（没翻拍稿就没录音、talking-head-edit 没被触发），或没 `/browse`。先补翻拍稿、补素材，再成片。
 - **profile 注入不准**：八成是 Phase O 蒸馏得糙，或 `~/.hedj-factory/profile` 指错了。重蒸或改标记文件。
 - **发布：social-auto-upload 装法**（Step 6 用，外部公开仓库 github.com/dreammis/social-auto-upload，MIT，`brew` 装不了，自己装。需 `uv` + `python3.10~3.12`。clone 到任意目录都行）：
