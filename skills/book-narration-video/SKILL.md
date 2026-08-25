@@ -6,14 +6,15 @@ description: |
   或 hyperframes TTS 旁白成片 → video-distill Phase 5 文案。
   触发词：「讲这本书」「把这本书做成视频」「说书视频」「书籍解读视频」「读书博主」「拆书视频」
   「这本书帮我做成口播」「书摘视频」「听书解读」。
-  边界：只要拆书笔记/读书笔记不成片 → 不是本 skill；输入是对标短视频不是书 → video-distill 的活；
+  边界：只要拆书笔记/读书笔记不成片 → 不是本 skill；完整链路（书→成片→文案→发号/onboarding）→ hedj-factory 总入口；
+  输入是对标短视频/链接不是书 → video-distill 的活；只拆解爆款视频结构 → video-distill；
   只要 TTS 旁白不做口播卡片 → hyperframes / website-to-hyperframes；只发不上号 → 别抢 social-auto-upload。
 ---
 
 # 讲书视频 · book-narration-video
 
 > 目标不是「把书念一遍」，而是**把一本书蒸馏成你能讲、观众想听的讲书视频**——核心主张 + 叙事骨架 + 金句 + 你的讲书角度。
-> 和 video-distill 的「翻拍对标视频」是**平行线 B**：输入从「别人的爆款视频」换成「一本书」，下游洗稿、注入 profile、成片、文案、发布全部复用。
+> 和 video-distill 的「翻拍对标视频」是**平行线 C**（hedj-factory 线 B 是视频、线 C 是讲书）：输入从「别人的爆款视频」换成「一本书」，下游洗稿、注入 profile、成片、文案、发布全部复用。
 
 ## 核心理念
 

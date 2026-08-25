@@ -1,0 +1,14 @@
+[
+  {"query": "把《原子习惯》这本书做成讲书视频，我自己口吻的成片和四平台文案", "should_trigger": true, "expected_skill": "book-narration-video"},
+  {"query": "我是读书博主，帮我把这本书解读成口播成片，要 book 卡那种", "should_trigger": true, "expected_skill": "book-narration-video"},
+  {"query": "说书视频：讲纳瓦尔宝典第三章，写成能直接录的讲书稿再剪成片", "should_trigger": true, "expected_skill": "book-narration-video"},
+  {"query": "这本书帮我做成视频，我有人设 profile，走完整链路", "should_trigger": true, "expected_skill": "hedj-factory"},
+  {"query": "拆书视频：《思考，快与慢》核心三个论点，15分钟口播量", "should_trigger": true, "expected_skill": "book-narration-video"},
+  {"query": "听书解读做成竖屏口播，书摘+我的观点", "should_trigger": true, "expected_skill": "book-narration-video"},
+  {"query": "只要《穷查理宝典》的拆书笔记，不要成片", "should_trigger": false, "expected_skill": "book-narration-video"},
+  {"query": "蒸馏这个抖音视频 https://www.douyin.com/video/123 做成翻拍", "should_trigger": false, "expected_skill": "book-narration-video"},
+  {"query": "帮我拆解这条爆款的叙事结构，分析它为什么火", "should_trigger": false, "expected_skill": "book-narration-video"},
+  {"query": "用 hyperframes 给这段旁白加 TTS 和字幕，不要口播卡片", "should_trigger": false, "expected_skill": "book-narration-video"},
+  {"query": "把这条视频号链接下载下来转写", "should_trigger": false, "expected_skill": "book-narration-video"},
+  {"query": "写一篇小红书读书感想，不要视频", "should_trigger": false, "expected_skill": "book-narration-video"}
+]
