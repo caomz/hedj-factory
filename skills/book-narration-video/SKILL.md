@@ -40,7 +40,15 @@ description: |
 #### 书源获取（按优先级）
 
 - **用户已有文字稿/笔记**：直接 Read，最省事。
-- **epub / pdf**：用 Read 或 `pdftotext` 提取相关章节；长书**只读要讲的部分**，别一次性塞全书进上下文。
+- **epub / pdf / txt / md**：用 `scripts/extract_book.py` 提取（用脚本，别手搓解析）：
+
+```bash
+python3 scripts/extract_book.py 书.epub --list                                # 先看目录：列章节段/页数
+python3 scripts/extract_book.py 书.epub --out 案例库/<book-slug>/ --chapters 2-5
+python3 scripts/extract_book.py 书.pdf  --out 案例库/<book-slug>/ --pages 10-25
+```
+
+  产出 `案例库/<book-slug>/原文.txt`（带章节分隔符），并自动建/更新 `source.txt`（书名/作者/来源/讲书范围，epub 元数据自动读，txt/pdf 用 `--title`/`--author` 补）。长书**先 `--list` 再按范围提取**，脚本默认 `--max-chars 60000` 截断兜底——别一次性塞全书进上下文。pdf 优先走 `pdftotext`（poppler），没装就用内置纯 Python 兜底（简单 pdf 可用；扫描版/复杂排版装 poppler：`brew install poppler` / `apt install poppler-utils`）。
 - **只有书名**：让用户给 3-5 条他最想讲的点 + 一段摘录；或公开书评/目录作骨架参考，**观点以用户口径为准**。
 - **封面图**：gstack `/browse` 搜书名 + 作者抓权威封面（Amazon/豆瓣/出版社），存 `案例库/<book-slug>/cover.jpg`；没 `/browse` 让用户手动给图。
 
@@ -53,7 +61,7 @@ description: |
 
 ### Phase 1: 读原文 + 写讲书拆解
 
-读完用户给的书摘/章节，产出 `案例库/<book-slug>/拆解.md`。模板对齐 video-distill，但把「视频」换成「书」：
+读完书源文本（用户给的书摘/章节，或 Phase 0 提取的 `原文.txt`），产出 `案例库/<book-slug>/拆解.md`。模板对齐 video-distill，但把「视频」换成「书」：
 
 ```markdown
 # 拆解：《书名》— <一句话讲书角度>
@@ -181,7 +189,8 @@ Phase 3 写讲书稿也会读「表达 DNA」定调，但产物是**口播脚本
 <工作区>/
 ├── 案例库/<book-slug>/          # 【蒸馏树】每本书一个
 │   ├── cover.jpg                书封（book 卡用）
-│   ├── source.txt               书名/作者/素材来源/讲书范围
+│   ├── source.txt               书名/作者/素材来源/讲书范围（extract_book.py 自动建/更新）
+│   ├── 原文.txt                 extract_book.py 提取的书源文本（按范围）
 │   └── 拆解.md                  ★讲书角度/骨架/金句
 └── 口播/<片名>/                 # 【生产树】每条讲书成片一个
     ├── 讲书稿.md                ★Step 3 产出：逐字口播脚本
@@ -209,5 +218,6 @@ Phase 3 写讲书稿也会读「表达 DNA」定调，但产物是**口播脚本
 - **没讲书稿就想去成片**：先写 `口播/<片名>/讲书稿.md`，和「讲书角度」是两回事。
 - **book 卡没书封**：检查 `cover.jpg` 是否在 `案例库/<book-slug>/`，build 时复制或软链到 `build/news/`。
 - **讲成读书笔记**：稿子是给观众听的，不是给编辑看的；加 hook、加「你」、加卡片锚点。
-- **书太长**：只讲 1-3 个核心论点，别试图一条视频讲完整本书。
+- **书太长**：只讲 1-3 个核心论点，别试图一条视频讲完整本书；提取时先 `extract_book.py --list` 再按范围取，别整本进上下文。
+- **pdf 提取出来是空/乱码**：多半是扫描版（要 OCR，本脚本不管）或没装 poppler——`brew install poppler` / `apt install poppler-utils` 后重跑；内置纯 Python 兜底只吃简单 pdf。
 - **和 video-distill 抢触发**：用户给的是**书**不是**视频链接**才用本 skill；给抖音/视频号链接 → video-distill。
