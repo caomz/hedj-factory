@@ -17,8 +17,9 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 SKILL_ROOT = SCRIPTS.parent
+REPO_ROOT = SKILL_ROOT.parent.parent
 
-# Paths relative to skill root
+# Paths relative to skill root (book-extract core)
 BUNDLE_FILES = [
     "scripts/extract_book.py",
     "scripts/extract_book.sh",
@@ -26,6 +27,13 @@ BUNDLE_FILES = [
     "scripts/test_extract_book.py",
     "scripts/smoke_test.sh",
     "references/transplant-to-state-machine.md",
+]
+
+# Paths relative to repo root (optional PR #4 companion)
+IMAGE_PROMPT_FILES = [
+    "skills/hyperframes/references/image-prompt-schema.md",
+    "skills/hyperframes/scripts/check_image_prompt_schema.py",
+    "skills/hyperframes/scripts/test_check_image_prompt_schema.py",
 ]
 
 
@@ -46,12 +54,24 @@ def main() -> int:
                     help="允许覆盖 --out 内已存在的同名文件")
     ap.add_argument("--dry-run", action="store_true",
                     help="只列出将复制的文件，不落盘")
+    ap.add_argument(
+        "--include-image-prompt",
+        action="store_true",
+        help="额外打包 hyperframes image-prompt-schema + 校验器（PR #4 伴侣）",
+    )
     args = ap.parse_args()
 
     missing = [rel for rel in BUNDLE_FILES if not (SKILL_ROOT / rel).is_file()]
     if missing:
         print("❌ 缺少文件：", ", ".join(missing), file=sys.stderr)
         return 1
+    if args.include_image_prompt:
+        missing_img = [
+            rel for rel in IMAGE_PROMPT_FILES if not (REPO_ROOT / rel).is_file()
+        ]
+        if missing_img:
+            print("❌ 缺少 image-prompt 文件：", ", ".join(missing_img), file=sys.stderr)
+            return 1
 
     out: Path = args.out.expanduser().resolve()
     if out.exists():
@@ -70,13 +90,19 @@ def main() -> int:
         "schema_version": 1,
         "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source_skill_root": str(SKILL_ROOT),
+        "include_image_prompt": bool(args.include_image_prompt),
         "note": "Selective transplant bundle. Do not overwrite local state-machine SKILL.md.",
         "files": [],
     }
 
-    for rel in BUNDLE_FILES:
-        src = SKILL_ROOT / rel
-        dst = out / rel
+    planned: list[tuple[Path, Path, str]] = [
+        (SKILL_ROOT / rel, out / rel, rel) for rel in BUNDLE_FILES
+    ]
+    if args.include_image_prompt:
+        for rel in IMAGE_PROMPT_FILES:
+            planned.append((REPO_ROOT / rel, out / rel, rel))
+
+    for src, dst, rel in planned:
         digest = sha256_file(src)
         entry = {"path": rel, "sha256": digest, "bytes": src.stat().st_size}
         manifest["files"].append(entry)
@@ -98,6 +124,8 @@ def main() -> int:
     print(f"✅ bundle → {out}")
     print(f"   manifest → {man_path}")
     print("   下一步：把 scripts/ 拷进本地状态机 skill；读 references/transplant-to-state-machine.md")
+    if args.include_image_prompt:
+        print("   image-prompt：把 skills/hyperframes/… 拷进本地对应路径后跑校验器")
     return 0
 
 
