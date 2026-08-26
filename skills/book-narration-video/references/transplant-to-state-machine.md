@@ -3,11 +3,17 @@
 > **目的**：把 GitHub `caomz/hedj-factory`（Cloud `main`）里已 harden 的书源提取能力，接到本地 baokuan / content-package v2 / 状态机版讲书 skill。
 > **禁止**：把 Cloud `main` 整支 `git merge` 进本地状态机 `main`（会覆盖本地 SKILL、撞品牌路径、缠上未提交改动）。
 
-Cloud 合入点：`b3f9002`（PR #2）。本文件随仓库演进；移植前再核对一次文件列表。
+Cloud 合入点：
+- 书源提取 harden：`b3f9002`（PR #2）
+- 共享 AI 生图规范：`7f778ea` / 内容 tip `99bbb71`（PR #4）
+
+本文件随仓库演进；移植前再核对一次文件列表。
 
 ---
 
 ## 1. 只带走这些文件
+
+### 1a. 书源提取（PR #2，默认包）
 
 | 路径 | 必带 | 说明 |
 |------|:----:|------|
@@ -18,6 +24,17 @@ Cloud 合入点：`b3f9002`（PR #2）。本文件随仓库演进；移植前再
 | `skills/book-narration-video/scripts/extract_book.sh` | ○ | 薄封装 |
 | `skills/book-narration-video/references/transplant-to-state-machine.md` | ○ | 本说明 |
 | `skills/book-narration-video/SKILL.md` | ✕ | **不要整文件覆盖**；只摘 Phase 0–3 方法 |
+
+### 1b. AI 生图规范伴侣（PR #4，可选）
+
+本地若已接封面兜底 / 九宫格 / 装饰素材，**另外**选择性带走（勿整仓 merge）：
+
+| 路径 | 必带 | 说明 |
+|------|:----:|------|
+| `skills/hyperframes/references/image-prompt-schema.md` | ● | 六块协议 + 生产合同（16:9 九宫格、无字书卡、成本闸门、provenance） |
+| `skills/hyperframes/scripts/check_image_prompt_schema.py` | ● | 精确章节 / 合同 / 接线校验 |
+| `skills/hyperframes/scripts/test_check_image_prompt_schema.py` | ○ | 4 项负向测试 |
+| 本地讲书 / talking-head SKILL | ✕ | **不要覆盖**；只粘贴封面兜底 + 成本闸门 +「证据用 /browse」纪律 |
 
 ### 推荐 checkout 命令（在本地状态机仓库）
 
@@ -40,7 +57,29 @@ git checkout FETCH_HEAD -- \
 ```bash
 python3 skills/book-narration-video/scripts/pack_transplant_bundle.py \
   --out /tmp/book-extract-transplant-bundle
-# 再把该目录拷到本地状态机仓库对应 scripts/ 下
+# 需要 PR #4 schema 时加：
+#   --include-image-prompt
+# 再把该目录拷到本地状态机仓库对应路径下（book scripts/ + 可选 hyperframes/）
+```
+
+### 可选：只 checkout image-prompt（PR #4）
+
+```bash
+git fetch https://github.com/caomz/hedj-factory.git main
+git checkout FETCH_HEAD -- \
+  skills/hyperframes/references/image-prompt-schema.md \
+  skills/hyperframes/scripts/check_image_prompt_schema.py \
+  skills/hyperframes/scripts/test_check_image_prompt_schema.py
+```
+
+验收：
+
+```bash
+python3 skills/hyperframes/scripts/check_image_prompt_schema.py
+python3 skills/hyperframes/scripts/test_check_image_prompt_schema.py -v
+# 期望：合同通过；4/4 OK
+# 注意：校验器会检查本仓 hyperframes / book-narration / talking-head / SOP 接线；
+# 本地状态机若路径不同，先改 WIRING 或只当参考规范使用 schema.md。
 ```
 
 ---
@@ -55,7 +94,9 @@ python3 skills/book-narration-video/scripts/pack_transplant_bundle.py \
 | `extraction-manifest.json` | 机器可读真源之一；损坏时 extract_book **fail-closed** |
 | `拆解.md` | → `制作准备.md` / `artifacts.brief` |
 | `讲书稿.md` | → **`口播/<项目>/口播稿.md`**（统一正式稿名，勿并存） |
-| `cover.jpg` | 独立参考素材（inventory 是否登记以本地为准） |
+| `cover.jpg` | 独立参考素材（inventory 是否登记以本地为准）；AI 兜底须为**无字装饰图** + 后期叠书名/作者/「AI 示意」，禁伪造官方书封（见 image-prompt-schema） |
+| `/browse` 证据图 | 登记可访问 `source_url` + 抓取时间；不得伪造 URL |
+| AI 生图素材 | 保存最终 prompt、模型/provider（可得时）、`ai_disclosure_required: true`；单价未知写「未知」，勿编造成本 |
 | `平台文案.md` | `artifacts.platform_copy` |
 | 成片 MP4 | `artifacts.final_video` |
 
@@ -92,6 +133,10 @@ python3 "$SKILL_ROOT/scripts/test_extract_book.py" -v
 
 # 烟雾（可选）
 bash "$SKILL_ROOT/scripts/smoke_test.sh"
+
+# 若带走了 image-prompt（PR #4）
+python3 skills/hyperframes/scripts/test_check_image_prompt_schema.py -v
+# 期望：4/4 OK（路径以本地为准）
 ```
 
 手工确认：
@@ -100,6 +145,7 @@ bash "$SKILL_ROOT/scripts/smoke_test.sh"
 - [ ] 损坏 manifest 时第二次提取失败且不写新文件
 - [ ] `source_lock` 能锁上 `原文.txt`
 - [ ] 工作流只认 `口播稿.md`
+- [ ] （可选）九宫格合同为约 16:9；AI 书卡无字；证据有 `source_url`
 
 ---
 

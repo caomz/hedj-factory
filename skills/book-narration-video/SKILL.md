@@ -239,7 +239,8 @@ Phase 3 写讲书稿也会读「表达 DNA」定调，但产物是**口播脚本
 ```bash
 # 打包可拷贝文件（在 Cloud clone）
 python3 skills/book-narration-video/scripts/pack_transplant_bundle.py --out /tmp/book-extract-bundle
-# 或在本地状态机仓库：git fetch + checkout 仅 scripts（见 reference）
+# 需要 PR #4 生图规范时加：--include-image-prompt
+# 或在本地状态机仓库：git fetch + checkout 仅 scripts / schema（见 reference）
 ```
 
 | 本 skill 产物 | 状态机接法 |
