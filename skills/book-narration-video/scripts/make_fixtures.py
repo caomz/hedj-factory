@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-# make_fixtures.py — 生成 smoke test 用的微型合成书源：sample.txt / sample.epub / sample.pdf
-# 全部本地合成、无版权内容，几 KB 大小；smoke_test.sh 每次运行前会重新生成（幂等）。
+# make_fixtures.py — 生成微型合成书源（txt/epub/pdf），默认写到给定目录。
+# 全部本地合成、无版权内容；测试请写到临时目录，不要覆盖仓库内已跟踪文件。
+import argparse
 import zipfile
 from pathlib import Path
 
-FIX = Path(__file__).parent / "fixtures"
-FIX.mkdir(exist_ok=True)
 
-
-def make_txt():
-    (FIX / "sample.txt").write_text(
+def make_txt(fix: Path):
+    (fix / "sample.txt").write_text(
         "微型习惯手册（合成测试书，无版权内容）\n"
         "作者：测试员\n"
         "\n"
@@ -30,7 +28,7 @@ def make_txt():
         encoding="utf-8")
 
 
-def make_epub():
+def make_epub(fix: Path):
     mimetype = "application/epub+zip"
     container = """<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -74,7 +72,7 @@ def make_epub():
             "每次微小的行动，都是给「我是这样的人」投一票。",
             "票数够了，习惯就不再需要坚持。"]),
     }
-    with zipfile.ZipFile(FIX / "sample.epub", "w") as zf:
+    with zipfile.ZipFile(fix / "sample.epub", "w") as zf:
         zf.writestr("mimetype", mimetype, compress_type=zipfile.ZIP_STORED)
         zf.writestr("META-INF/container.xml", container)
         zf.writestr("OEBPS/content.opf", opf)
@@ -82,9 +80,8 @@ def make_epub():
             zf.writestr(name, content)
 
 
-def make_pdf():
-    # 手搓最小两页 pdf（无压缩流 + 正确 xref），pdftotext 和纯 stdlib 兜底都能读。
-    # 正文用 ASCII：无 ToUnicode 映射时中文在简单 Type1 字体里没法编码。
+def make_pdf(fix: Path):
+    # 手搓最小两页 pdf（无压缩流 + 正确 xref）。PDF xref 行尾空格是规范要求。
     def page_stream(lines):
         ops = ["BT", "/F1 12 Tf", "72 720 Td", "14 TL"]
         for k, line in enumerate(lines):
@@ -122,12 +119,21 @@ def make_pdf():
         out += b"%010d 00000 n \n" % offsets[num]
     out += (b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
             % (len(objs) + 1, xref_pos))
-    (FIX / "sample.pdf").write_bytes(bytes(out))
+    (fix / "sample.pdf").write_bytes(bytes(out))
+
+
+def make_all(fix: Path):
+    fix.mkdir(parents=True, exist_ok=True)
+    make_txt(fix)
+    make_epub(fix)
+    make_pdf(fix)
+    return sorted(fix.iterdir())
 
 
 if __name__ == "__main__":
-    make_txt()
-    make_epub()
-    make_pdf()
-    for f in sorted(FIX.iterdir()):
-        print(f"✓ {f.relative_to(FIX.parent)} ({f.stat().st_size} B)")
+    ap = argparse.ArgumentParser(description="生成合成书源 fixtures 到指定目录")
+    ap.add_argument("--out", type=Path, required=True,
+                    help="输出目录（测试请用临时目录，勿写回仓库 fixtures/）")
+    args = ap.parse_args()
+    for f in make_all(args.out):
+        print(f"✓ {f} ({f.stat().st_size} B)")

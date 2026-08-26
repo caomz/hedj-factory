@@ -22,10 +22,13 @@
 #   中文字体请装 poppler：`brew install poppler` / `apt install poppler-utils`）。
 # - 版权纪律：只提取要讲的范围；source.txt 记清书名/作者/来源/讲书范围。
 import argparse
+import hashlib
+import os
 import posixpath
 import re
 import subprocess
 import sys
+import tempfile
 import zipfile
 import zlib
 from datetime import datetime
@@ -43,6 +46,48 @@ SEP = "═" * 8
 def die(msg: str, code: int = 1):
     print(f"❌ {msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def safe_outfile(outdir: Path, name: str) -> Path:
+    """Resolve output file under outdir; reject absolute paths and .. escape."""
+    outdir = outdir.resolve()
+    candidate = Path(name)
+    if candidate.is_absolute():
+        die(f"--name 不能是绝对路径：{name!r}")
+    if ".." in candidate.parts:
+        die(f"--name 不允许包含 '..'：{name!r}")
+    outfile = (outdir / candidate).resolve()
+    try:
+        outfile.relative_to(outdir)
+    except ValueError:
+        die(f"--name 逃出了 --out 目录：{name!r} → {outfile}")
+    return outfile
+
+
+def atomic_write_text(path: Path, text: str):
+    """Write via temp file in same directory, then os.replace (atomic on same FS)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def detect_format(path: Path) -> str:
@@ -508,26 +553,39 @@ def assemble(book: dict, picked: list, meta: dict, max_chars: int):
     return "\n".join(head) + "\n" + body + "\n", truncated
 
 
-def update_source_txt(outdir: Path, meta: dict):
+def update_source_txt(outdir: Path, meta: dict, dry_run: bool = False):
     p = outdir / "source.txt"
     record = (f"{meta['stamp']} · extract_book.py · {meta['src']}（{meta['fmt']}）"
+              f" · sha256={meta['sha256'][:16]}…"
               f" · 范围：{meta['range']} · {meta['chars']} 字 → {meta['outname']}")
     if not p.exists():
-        p.write_text(
+        content = (
             f"书名：{meta['title']}\n"
             f"作者：{meta['author'] or '（待补）'}\n"
             f"ISBN：（待补）\n"
             f"素材来源：{meta['src']}（{meta['fmt']}，用户提供）\n"
+            f"来源SHA256：{meta['sha256']}\n"
             f"讲书范围：{meta['range']}\n"
-            f"\n--- 提取记录 ---\n{record}\n",
-            encoding="utf-8")
+            f"\n--- 提取记录 ---\n{record}\n"
+        )
+        if dry_run:
+            return "将创建（dry-run）"
+        atomic_write_text(p, content)
         return "已创建"
     cur = p.read_text(encoding="utf-8")
+    if "来源SHA256：" not in cur and "--- 提取记录 ---" in cur:
+        # 旧文件补一行哈希（插在讲书范围后 / 提取记录前）
+        cur = cur.replace("--- 提取记录 ---",
+                          f"来源SHA256：{meta['sha256']}\n\n--- 提取记录 ---", 1)
+    elif "来源SHA256：" not in cur:
+        cur = cur.rstrip("\n") + f"\n来源SHA256：{meta['sha256']}\n"
     if "--- 提取记录 ---" not in cur:
         cur = cur.rstrip("\n") + "\n\n--- 提取记录 ---\n"
     elif not cur.endswith("\n"):
         cur += "\n"
-    p.write_text(cur + record + "\n", encoding="utf-8")
+    if dry_run:
+        return "将追加提取记录（dry-run）"
+    atomic_write_text(p, cur + record + "\n")
     return "已追加提取记录"
 
 
@@ -550,14 +608,20 @@ def main():
                     help=f"最多提取字符数，默认 {DEFAULT_MAX_CHARS}，0=不限")
     ap.add_argument("--title", default="", help="书名（写进 source.txt）")
     ap.add_argument("--author", default="", help="作者（写进 source.txt）")
-    ap.add_argument("--name", default="原文.txt", help="输出文本文件名（默认 原文.txt）")
+    ap.add_argument("--name", default="原文.txt",
+                    help="输出文本文件名（默认 原文.txt；禁止绝对路径与 '..'）")
     ap.add_argument("--list", action="store_true", help="只列章节/页数，不提取")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="只打印将写入的路径与字数，不落盘")
+    ap.add_argument("--force", action="store_true",
+                    help="允许覆盖已存在的输出文件（默认拒绝覆盖；覆盖前先 .bak）")
     args = ap.parse_args()
 
     src = Path(args.source)
     if not src.exists():
         die(f"找不到书源文件：{src}")
     fmt = detect_format(src)
+    digest = sha256_file(src)
 
     if fmt == "pdf":
         if args.chapters:
@@ -586,19 +650,43 @@ def main():
         "src": src.name, "fmt": fmt, "range": range_label,
         "stamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "outname": args.name,
+        "sha256": digest,
     }
     text, _ = assemble(book, picked, meta, max(0, args.max_chars))
     meta["chars"] = len(text)
 
     if not args.out:
+        if args.dry_run:
+            print(f"[dry-run] 将打印到 stdout（{meta['chars']} 字，sha256={digest[:16]}…）")
+            return
         print(text)
         return
-    outdir = Path(args.out)
+
+    outdir = Path(args.out).expanduser().resolve()
+    outfile = safe_outfile(outdir, args.name)
+
+    if outfile.exists() and not args.force:
+        die(f"输出已存在：{outfile}\n"
+            f"   不想覆盖就换 --name；确认覆盖请加 --force（会先备份为 .bak）")
+
+    if args.dry_run:
+        print(f"[dry-run] 将写入：{outfile}（{meta['chars']} 字，{meta['range']}）")
+        print(f"[dry-run] 来源 sha256={digest}")
+        print(f"[dry-run] source.txt：{outdir / 'source.txt'}")
+        return
+
     outdir.mkdir(parents=True, exist_ok=True)
-    outfile = outdir / args.name
-    outfile.write_text(text, encoding="utf-8")
-    action = update_source_txt(outdir, meta)
+    if outfile.exists() and args.force:
+        bak = outfile.with_suffix(outfile.suffix + ".bak")
+        # 备份也必须仍在 outdir 内
+        bak = safe_outfile(outdir, bak.name)
+        os.replace(outfile, bak)
+        print(f"⚠️  已存在，备份为 {bak.name}", file=sys.stderr)
+
+    atomic_write_text(outfile, text)
+    action = update_source_txt(outdir, meta, dry_run=False)
     print(f"✅ 提取完成：{outfile}（{meta['chars']} 字，{meta['range']}）")
+    print(f"   来源 sha256={digest}")
     print(f"   source.txt {action}：{outdir / 'source.txt'}（书名/作者/ISBN 留了待补位，记得核对）")
 
 
