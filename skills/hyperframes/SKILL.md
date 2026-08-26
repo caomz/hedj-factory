@@ -334,6 +334,7 @@ Skip on small edits (fixing a color, adjusting one duration). Run on new composi
 - **[references/typography.md](references/typography.md)** — Typography: font pairing, OpenType features, dark-background adjustments, font discovery script. **Always read** — every composition has text.
 - **[references/motion-principles.md](references/motion-principles.md)** — Motion design principles: easing as emotion, timing as weight, choreography as hierarchy, scene pacing, ambient motion, anti-patterns. Read when choreographing GSAP animations.
 - **[visual-styles.md](visual-styles.md)** — 8 named visual styles (Swiss Pulse, Velvet Standard, Deconstructed, Maximalist Type, Data Drift, Soft Signal, Folk Frequency, Shadow Cut) with hex palettes, GSAP easing signatures, and shader pairings. Read when user names a style or when generating DESIGN.md.
+- **[references/image-prompt-schema.md](references/image-prompt-schema.md)** — AI 生图提示词规范：browse-vs-生图分流、六块协议、填空模板、批量九宫格成本闸门、负面清单。Read when generating `visual-style.md` 的 `style_prompt_full`, or when the user asks for AI-generated stills / B-roll / 九宫格 storyboard images. Image-prompt palette and typography must trace back to DESIGN.md / visual-style.md — same rule as the Visual Identity Gate.
 - **[house-style.md](house-style.md)** — Default motion, sizing, and color palettes when no style is specified.
 - **[patterns.md](patterns.md)** — PiP, title cards, slide show patterns.
 - **[data-in-motion.md](data-in-motion.md)** — Data, stats, and infographic patterns.
