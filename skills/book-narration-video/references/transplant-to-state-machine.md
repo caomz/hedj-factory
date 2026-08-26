@@ -1,6 +1,6 @@
 # 选择性移植：Cloud book-extract → 本地状态机仓库
 
-> **目的**：把 GitHub `caomz/hedj-factory`（Cloud `main`）里已 harden 的书源提取能力，接到本地 baokuan / content-package v2 / 状态机版讲书 skill。  
+> **目的**：把 GitHub `caomz/hedj-factory`（Cloud `main`）里已 harden 的书源提取能力，接到本地 baokuan / content-package v2 / 状态机版讲书 skill。
 > **禁止**：把 Cloud `main` 整支 `git merge` 进本地状态机 `main`（会覆盖本地 SKILL、撞品牌路径、缠上未提交改动）。
 
 Cloud 合入点：`b3f9002`（PR #2）。本文件随仓库演进；移植前再核对一次文件列表。
