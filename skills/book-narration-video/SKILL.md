@@ -53,7 +53,7 @@ python3 "$SKILL_ROOT/scripts/extract_book.py" 书.pdf  --out 案例库/<book-slu
 
   产出 `案例库/<book-slug>/原文.txt`（带章节分隔符）、人读 `source.txt`、机器可读 `extraction-manifest.json`（`schema_version: 1`；每次提取的**完整**输入/输出 SHA-256 都在记录里）。若已有 manifest **损坏或结构不对**，脚本 **fail-closed**：拒绝写入任何输出 / 备份 / 追加，避免 provenance 静默丢历史。epub 元数据自动读，txt/pdf 用 `--title`/`--author` 补。长书**先 `--list` 再按范围提取**，脚本默认 `--max-chars 60000`（禁止负数；`0`=不限）。pdf 优先 `pdftotext`（poppler）。`--name` 禁止绝对路径与 `..`，可含子目录（备份落在同子目录）。
 - **只有书名**：让用户给 3-5 条他最想讲的点 + 一段**他自己确认过的摘录**；或公开书评/目录作**骨架参考**——**不得把二手书评写成「原书主张」**；拆解.md 须标注观点来源（原书摘录 / 用户口述 / 公开书评）。
-- **封面图**：gstack `/browse` 搜书名 + 作者抓权威封面（Amazon/豆瓣/出版社），存 `案例库/<book-slug>/cover.jpg`；没 `/browse` 让用户手动给图。**两条路都走不通才 AI 生成示意书封兜底**：按 hyperframes `references/image-prompt-schema.md` 的模板 A（六块协议 + 负面清单）写提示词，成片注明「示意封面」。其余 AI 生图素材（示意信息图、多格分镜）同读该规范；**批量多格/九宫格必过其成本闸门**（先报预估格数/调用/耗时，超阈值等确认）。
+- **封面图**：gstack `/browse` 搜书名 + 作者抓出版社/作者等官方封面，存 `案例库/<book-slug>/cover.jpg`；没 `/browse` 让用户手动给图。**两条路都走不通才 AI 生成无字的 book 卡装饰图**：按 [共享 AI 生图提示词规范](../hyperframes/references/image-prompt-schema.md) 的模板 A（六块协议 + 负面清单）写提示词，不能伪造或复刻书封；书名、作者和「AI 生成示意」由后期组件叠加。其余 AI 生图素材（示意信息图、多格分镜）同读该规范；**批量多格/九宫格必过其成本闸门**（先报预估格数/调用/耗时，超阈值等确认）。
 
 #### 版权纪律（命根子，别跳过）
 

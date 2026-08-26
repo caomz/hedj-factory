@@ -1,76 +1,125 @@
 #!/usr/bin/env python3
-"""校验 image-prompt-schema.md 存在且包含必需章节；同时校验三处 SKILL 接线。
+"""Validate the shared image-prompt contract and its production wiring."""
+from __future__ import annotations
 
-用法: python3 skills/hyperframes/scripts/check_image_prompt_schema.py
-退出码: 0 = 全部通过, 1 = 有缺失。
-"""
+import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCHEMA = REPO_ROOT / "skills" / "hyperframes" / "references" / "image-prompt-schema.md"
 
-REQUIRED_SECTIONS = [
-    # browse vs 生图分流
+DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
+SCHEMA_REL = Path("skills/hyperframes/references/image-prompt-schema.md")
+
+REQUIRED_HEADINGS = (
     "什么时候用 /browse、什么时候用 AI 生图",
-    # 六块协议总标题 + 六块各自的名字
-    "六块提示词协议",
-    "主体与任务（subject/task）",
-    "构图与版式（composition/layout",
-    "视觉风格与材质（visual style/materials）",
-    "文字与标签（text & labels）",
-    "画幅比例与输出格式（aspect ratio / output format）",
-    "约束与负面清单（constraints & negatives）",
-    # 模板、成本闸门、禁区、署名
-    "填空模板",
-    "模板 A · 书封兜底",
-    "模板 B · 示意信息图",
-    "模板 C · 叙事多格 / 九宫格",
-    "成本闸门",
-    "禁止事项",
+    "六块提示词协议（6-block protocol）",
+    "1. 主体与任务（subject/task）",
+    "2. 构图与版式（composition/layout）",
+    "3. 视觉风格与材质（visual style/materials）",
+    "4. 文字与标签（text & labels）",
+    "5. 画幅比例与输出格式（aspect ratio / output format）",
+    "6. 约束与负面清单（constraints & negatives）",
+    "填空模板（按用途取用）",
+    "模板 A · 书籍卡片装饰图兜底（book-narration-video `cover.jpg`）",
+    "模板 B · 示意信息图 / 图表风卡片（talking-head chart/recap 类装饰素材）",
+    "模板 C · 叙事多格 / 九宫格 storyboard",
+    "成本闸门（批量九宫格 / 多格生成必过）",
+    "来源登记与生成后验收",
+    "禁止事项（What NOT to Do）",
     "署名与来源",
+)
+
+REQUIRED_SCHEMA_CONTRACTS = (
+    "证据必须真，装饰可以生",
+    "AI 生成的栅格图默认不承载生产文字",
+    "`book-narration-video` 正式九宫格整页为约 16:9",
+    "不能伪造或复刻书封",
+    "成本写“未知”",
+    "ai_disclosure_required: true",
+    "source_url",
     "awesome-gpt-image-2",
-]
+    "Copyright © 2026 freestylefly",
+    "MIT License",
+)
+
+FORBIDDEN_SCHEMA_CONTRACTS = (
+    "单张 1:1 画布等分 3×3 九格",
+    "生成《<书名>》（<作者>）的示意书封",
+)
 
 WIRING = {
-    REPO_ROOT / "skills" / "hyperframes" / "SKILL.md": "references/image-prompt-schema.md",
-    REPO_ROOT / "skills" / "book-narration-video" / "SKILL.md": "image-prompt-schema.md",
-    REPO_ROOT / "skills" / "talking-head-edit" / "SKILL.md": "image-prompt-schema.md",
-    REPO_ROOT / "docs" / "SOP.md": "image-prompt-schema.md",
+    Path("skills/hyperframes/SKILL.md"): (
+        "references/image-prompt-schema.md",
+        "Visual Identity Gate",
+    ),
+    Path("skills/book-narration-video/SKILL.md"): (
+        "../hyperframes/references/image-prompt-schema.md",
+        "成本闸门",
+        "不能伪造或复刻书封",
+    ),
+    Path("skills/talking-head-edit/SKILL.md"): (
+        "../hyperframes/references/image-prompt-schema.md",
+        "/browse` = 证据",
+        "绝不用 AI 伪造真实新闻截图",
+    ),
+    Path("docs/SOP.md"): (
+        "skills/hyperframes/references/image-prompt-schema.md",
+        "绝不 AI 伪造",
+        "成本闸门",
+    ),
 }
 
 
-def main() -> int:
-    failures = []
+def markdown_headings(text: str) -> set[str]:
+    return {
+        match.group(1).strip()
+        for match in re.finditer(r"^#{2,3}\s+(.+?)\s*$", text, flags=re.MULTILINE)
+    }
 
-    if not SCHEMA.is_file():
-        print(f"FAIL: 缺文件 {SCHEMA.relative_to(REPO_ROOT)}")
-        return 1
-    text = SCHEMA.read_text(encoding="utf-8")
 
-    for section in REQUIRED_SECTIONS:
-        if section not in text:
-            failures.append(f"schema 缺章节/关键词: {section!r}")
+def check_repo(repo_root: Path = DEFAULT_REPO_ROOT) -> list[str]:
+    repo_root = repo_root.resolve()
+    schema = repo_root / SCHEMA_REL
+    failures: list[str] = []
+    if not schema.is_file():
+        return [f"缺文件 {SCHEMA_REL}"]
+    text = schema.read_text(encoding="utf-8")
+    headings = markdown_headings(text)
+    for heading in REQUIRED_HEADINGS:
+        if heading not in headings:
+            failures.append(f"schema 缺精确章节: {heading!r}")
+    for contract in REQUIRED_SCHEMA_CONTRACTS:
+        if contract not in text:
+            failures.append(f"schema 缺生产合同: {contract!r}")
+    for contract in FORBIDDEN_SCHEMA_CONTRACTS:
+        if contract in text:
+            failures.append(f"schema 含冲突合同: {contract!r}")
 
-    for path, needle in WIRING.items():
-        rel = path.relative_to(REPO_ROOT)
+    for relative, needles in WIRING.items():
+        path = repo_root / relative
         if not path.is_file():
-            failures.append(f"缺接线文件: {rel}")
-        elif needle not in path.read_text(encoding="utf-8"):
-            failures.append(f"{rel} 未引用 {needle}")
+            failures.append(f"缺接线文件: {relative}")
+            continue
+        wired = path.read_text(encoding="utf-8")
+        for needle in needles:
+            if needle not in wired:
+                failures.append(f"{relative} 缺接线语义: {needle!r}")
+    return failures
 
+
+def main() -> int:
+    failures = check_repo()
     if failures:
-        for f in failures:
-            print(f"FAIL: {f}")
+        for failure in failures:
+            print(f"FAIL: {failure}")
         print(f"\n{len(failures)} 项未通过")
         return 1
-
     print(
-        f"OK: {SCHEMA.relative_to(REPO_ROOT)} 含全部 {len(REQUIRED_SECTIONS)} 个必需章节；"
-        f"{len(WIRING)} 处接线就位"
+        f"OK: {SCHEMA_REL} 含全部 {len(REQUIRED_HEADINGS)} 个精确章节、"
+        f"{len(REQUIRED_SCHEMA_CONTRACTS)} 条生产合同；{len(WIRING)} 处接线通过"
     )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
