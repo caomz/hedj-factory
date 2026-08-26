@@ -89,6 +89,7 @@ python3 <ENG>/align.py groups.authored.json groups.full.json   # difflib 把每�
 - 结尾 → `recap` 逐条点亮总结
 卡片类型和字段全在 DESIGN.md「卡片 widget 系统」。**截图要权威源**(官网/权威媒体/Wikipedia),用 gstack `/browse` 抓,存 `news/`。时间点要对上他说那句话(早了晚了都出戏)。卡片之间时间别重叠(都在 top:140 区)。
 **没 `/browse` 时别硬凑**:gstack 没装就抓不了截图。这时**不要出没素材的空卡、也不要拿不相干的图凑**——直接告诉用户"我这没 /browse,抓不了截图",让他装 gstack 或把需要的截图手动放进 `news/`,你再套卡片。素材缺了,成片质感直接塌,值得停下来要。
+**`/browse` = 证据,AI 生图 = 装饰**:新闻/报道/真实数据截图只能 `/browse` 抓真图,**绝不用 AI 伪造真实新闻截图**。AI 生图只用于纯装饰/示意类素材(示意信息图、氛围图),且必须按 hyperframes `references/image-prompt-schema.md` 的六块协议 + 负面清单写提示词(无水印、无乱码中文、不混真实平台 UI)。
 
 ### 4. 主题 + 字体
 **默认就把 Claude 暖拷进来**(珊瑚 `#D97757` + 暖奶白,= 0xKaiwen 口播号当前主基调),别裸跑引擎兜底:

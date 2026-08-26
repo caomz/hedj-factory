@@ -117,6 +117,7 @@
 - **讲书和翻拍搞混**：给的是视频链接 → video-distill（线 B）；给的是书/章节 → book-narration-video（线 C）。
 - **书源提取**：`SKILL_ROOT="$HOME/.claude/skills/book-narration-video"`；`python3 "$SKILL_ROOT/scripts/extract_book.py" 书.epub --list`，再 `--out 案例库/<slug>/ --chapters 2-5`。覆盖加 `--force`，预览加 `--dry-run`。测试：`python3 "$SKILL_ROOT/scripts/test_extract_book.py" -v`（或 `bash …/smoke_test.sh`）。
 - **没卡片/没截图**：八成是没稿（→没录音→talking-head-edit 没被触发），或没 gstack `/browse`。先补稿、补素材再成片。
+- **AI 生图素材**（书封兜底/示意图/九宫格分镜）：按 `skills/hyperframes/references/image-prompt-schema.md` 的六块协议写提示词；真实新闻/证据截图只用 `/browse`，绝不 AI 伪造；批量九宫格先过成本闸门。
 - **视频号下载**：用 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链 curl 直下。别上 mitmproxy。需要 gstack `/browse` 驱动解析器。
 - **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。whisper 模型复用机器已有的。
 - **gstack `/browse` 怎么装**：`brew` 装不了，但它是**公开仓库**（github.com/garrytan/gstack），**不用找团队要**，自己一行装（需 Bun v1.0+ 和 Git）：`git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`。装完重开一轮生效，升级用 `/gstack-upgrade`。临时不装也能跑：视频号改备选下载、截图手动塞进 `build/news/`。
