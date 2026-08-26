@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""extract_book.py unittest — fixtures 全部生成在 TemporaryDirectory。"""
+"""extract_book.py unittest — fixtures 写在 mkdtemp 目录；不主动递归清理（交给系统 tmp 回收）。"""
 from __future__ import annotations
 
 import hashlib
@@ -25,8 +25,10 @@ def run(args, check=True):
 class ExtractBookTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._tmp = tempfile.TemporaryDirectory(prefix="extract-book-")
-        cls.fix = Path(cls._tmp.name) / "fixtures"
+        # mkdtemp only — no TemporaryDirectory.cleanup() / no shell rm -rf.
+        # System tmp cleaner reclaims; we do not recursively delete directories.
+        cls.root = Path(tempfile.mkdtemp(prefix="extract-book-"))
+        cls.fix = cls.root / "fixtures"
         subprocess.run(
             [sys.executable, str(MAKE_FIX), "--out", str(cls.fix)],
             check=True, capture_output=True, text=True,
@@ -35,11 +37,6 @@ class ExtractBookTests(unittest.TestCase):
         cls.epub = cls.fix / "sample.epub"
         cls.pdf = cls.fix / "sample.pdf"
 
-    @classmethod
-    def tearDownClass(cls):
-        # Controlled temp dir created by tempfile; not a shell rm -rf of user paths.
-        cls._tmp.cleanup()
-
     def test_help(self):
         r = run(["--help"])
         self.assertIn("--chapters", r.stdout)
@@ -47,7 +44,7 @@ class ExtractBookTests(unittest.TestCase):
         self.assertIn("--force", r.stdout)
 
     def test_txt_list_and_chapter_range(self):
-        out = Path(self._tmp.name) / "out-txt"
+        out = self.root / "out-txt"
         r = run([str(self.txt), "--list"])
         self.assertIn("第二章 环境的杠杆", r.stdout)
         run([str(self.txt), "--out", str(out), "--chapters", "4",
@@ -61,12 +58,13 @@ class ExtractBookTests(unittest.TestCase):
         self.assertIn("输出SHA256：", src)
         self.assertNotIn("来源SHA256：", src)
         man = json.loads((out / "extraction-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["schema_version"], 1)
         self.assertEqual(len(man["extractions"]), 1)
         self.assertEqual(man["latest"]["input_sha256"],
                          hashlib.sha256(self.txt.read_bytes()).hexdigest())
 
     def test_epub_meta_range_and_append(self):
-        out = Path(self._tmp.name) / "out-epub"
+        out = self.root / "out-epub"
         r = run([str(self.epub), "--list"])
         self.assertIn("微型习惯手册", r.stdout)
         self.assertIn("共 3 个章节段", r.stdout)
@@ -85,7 +83,7 @@ class ExtractBookTests(unittest.TestCase):
 
     def test_multi_source_full_hashes(self):
         """EPUB then TXT: both full input hashes must remain recoverable."""
-        out = Path(self._tmp.name) / "out-multi"
+        out = self.root / "out-multi"
         epub_sha = hashlib.sha256(self.epub.read_bytes()).hexdigest()
         txt_sha = hashlib.sha256(self.txt.read_bytes()).hexdigest()
         run([str(self.epub), "--out", str(out), "--chapters", "1", "--name", "原文-epub.txt"])
@@ -101,7 +99,7 @@ class ExtractBookTests(unittest.TestCase):
         self.assertEqual(man["latest"]["input_sha256"], txt_sha)
 
     def test_pdf_page_range(self):
-        out = Path(self._tmp.name) / "out-pdf"
+        out = self.root / "out-pdf"
         r = run([str(self.pdf), "--list"])
         self.assertIn("共 2 页", r.stdout)
         run([str(self.pdf), "--out", str(out), "--pages", "2",
@@ -125,7 +123,7 @@ class ExtractBookTests(unittest.TestCase):
         self.assertIn("必须是文件", r.stderr)
 
     def test_refuse_overwrite_without_force(self):
-        out = Path(self._tmp.name) / "out-ow"
+        out = self.root / "out-ow"
         run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t"])
         r = run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t"],
                 check=False)
@@ -133,7 +131,7 @@ class ExtractBookTests(unittest.TestCase):
         self.assertIn("输出已存在", r.stderr)
 
     def test_force_backup_nested_name(self):
-        out = Path(self._tmp.name) / "out-force"
+        out = self.root / "out-force"
         run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t1",
              "--name", "nested/原文.txt"])
         run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t2",
@@ -143,28 +141,83 @@ class ExtractBookTests(unittest.TestCase):
         self.assertFalse((out / "原文.txt.bak").exists())
 
     def test_dry_run_no_write(self):
-        out = Path(self._tmp.name) / "out-dry"
+        out = self.root / "out-dry"
         r = run([str(self.txt), "--out", str(out), "--chapters", "4", "--dry-run"])
         self.assertIn("[dry-run]", r.stdout)
         self.assertFalse(out.exists())
 
     def test_path_escape_rejected(self):
-        out = Path(self._tmp.name) / "out-esc"
+        out = self.root / "out-esc"
         out.mkdir(parents=True, exist_ok=True)
         r = run([str(self.txt), "--out", str(out), "--chapters", "4",
                  "--name", "../../escaped.txt"], check=False)
         self.assertNotEqual(r.returncode, 0)
         self.assertTrue("不允许" in r.stderr or "逃出" in r.stderr or "绝对路径" in r.stderr)
-        self.assertFalse((Path(self._tmp.name) / "escaped.txt").exists())
+        self.assertFalse((self.root / "escaped.txt").exists())
 
     def test_sha256_matches_source(self):
-        out = Path(self._tmp.name) / "out-sha"
+        out = self.root / "out-sha"
         digest = hashlib.sha256(self.epub.read_bytes()).hexdigest()
         run([str(self.epub), "--out", str(out), "--chapters", "1"])
         src = (out / "source.txt").read_text(encoding="utf-8")
         self.assertIn(f"输入SHA256：{digest}", src)
         man = json.loads((out / "extraction-manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(man["latest"]["input_sha256"], digest)
+
+    def test_corrupt_manifest_fails_without_writes(self):
+        out = self.root / "out-corrupt"
+        run([str(self.epub), "--out", str(out), "--chapters", "1", "--name", "one.txt"])
+        man_path = out / "extraction-manifest.json"
+        src_path = out / "source.txt"
+        src_before = src_path.read_bytes()
+        man_path.write_text("{not-json", encoding="utf-8")
+        r = run([str(self.txt), "--out", str(out), "--chapters", "4",
+                 "--name", "two.txt", "--title", "t"], check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("不可读", r.stderr)
+        self.assertEqual(man_path.read_text(encoding="utf-8"), "{not-json")
+        self.assertEqual(src_path.read_bytes(), src_before)
+        self.assertFalse((out / "two.txt").exists())
+        self.assertFalse((out / "one.txt.bak").exists())
+        self.assertTrue((out / "one.txt").exists())
+        # restore note: leave corrupt as-is (asserted); do not rewrite man_before
+
+    def test_wrong_manifest_shape_fails_without_writes(self):
+        out = self.root / "out-shape"
+        run([str(self.epub), "--out", str(out), "--chapters", "1", "--name", "one.txt"])
+        man_path = out / "extraction-manifest.json"
+        src_path = out / "source.txt"
+        src_before = src_path.read_bytes()
+        one_before = (out / "one.txt").read_bytes()
+        bad = "[]"
+        man_path.write_text(bad, encoding="utf-8")
+        r = run([str(self.txt), "--out", str(out), "--chapters", "4",
+                 "--name", "two.txt", "--title", "t", "--force"], check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertTrue("顶层必须是 object" in r.stderr or "schema_version" in r.stderr
+                        or "extractions" in r.stderr)
+        self.assertEqual(man_path.read_text(encoding="utf-8"), bad)
+        self.assertEqual(src_path.read_bytes(), src_before)
+        self.assertEqual((out / "one.txt").read_bytes(), one_before)
+        self.assertFalse((out / "two.txt").exists())
+        self.assertFalse((out / "one.txt.bak").exists())
+
+    def test_wrong_extractions_type_fails_without_writes(self):
+        out = self.root / "out-ext-type"
+        run([str(self.epub), "--out", str(out), "--chapters", "1", "--name", "one.txt"])
+        man_path = out / "extraction-manifest.json"
+        src_before = (out / "source.txt").read_bytes()
+        man_path.write_text(
+            json.dumps({"schema_version": 1, "extractions": {"bad": True}}),
+            encoding="utf-8")
+        bad = man_path.read_text(encoding="utf-8")
+        r = run([str(self.txt), "--out", str(out), "--chapters", "4",
+                 "--name", "two.txt", "--title", "t"], check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("extractions 必须是 list", r.stderr)
+        self.assertEqual(man_path.read_text(encoding="utf-8"), bad)
+        self.assertEqual((out / "source.txt").read_bytes(), src_before)
+        self.assertFalse((out / "two.txt").exists())
 
 
 if __name__ == "__main__":

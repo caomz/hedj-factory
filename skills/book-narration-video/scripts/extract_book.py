@@ -597,8 +597,27 @@ def update_source_txt(outdir: Path, meta: dict, dry_run: bool = False):
     return "已追加提取记录"
 
 
-def update_extraction_manifest(outdir: Path, meta: dict, dry_run: bool = False):
-    """Machine-readable provenance for source_lock / content-package transplant."""
+def load_extraction_manifest(path: Path) -> dict:
+    """Fail-closed load. Call BEFORE any outfile / source.txt / backup writes."""
+    if not path.exists():
+        return {"schema_version": 1, "extractions": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"extraction manifest 不可读，拒绝覆盖：{exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("extraction manifest 顶层必须是 object")
+    if data.get("schema_version") != 1:
+        raise ValueError(
+            f"不支持的 extraction manifest schema_version："
+            f"{data.get('schema_version')!r}（需要 1）")
+    if not isinstance(data.get("extractions"), list):
+        raise ValueError("extraction manifest.extractions 必须是 list")
+    return data
+
+
+def append_extraction_manifest(outdir: Path, meta: dict, data: dict, dry_run: bool = False):
+    """Append one extraction entry to a previously validated manifest dict."""
     p = outdir / "extraction-manifest.json"
     entry = {
         "stamp": meta["stamp"],
@@ -616,16 +635,11 @@ def update_extraction_manifest(outdir: Path, meta: dict, dry_run: bool = False):
     }
     if dry_run:
         return "将写入（dry-run）"
-    if p.exists():
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            data = {"extractions": []}
-    else:
-        data = {"extractions": []}
-    if not isinstance(data.get("extractions"), list):
-        data["extractions"] = []
-    data["extractions"].append(entry)
+    data = dict(data)
+    data["schema_version"] = 1
+    extractions = list(data.get("extractions") or [])
+    extractions.append(entry)
+    data["extractions"] = extractions
     data["latest"] = entry
     atomic_write_text(p, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     return "已更新"
@@ -716,6 +730,13 @@ def main():
 
     outdir = Path(args.out).expanduser().resolve()
     outfile = safe_outfile(outdir, args.name)
+    man_path = outdir / "extraction-manifest.json"
+
+    # Fail-closed BEFORE any write / backup / mkdir side effects that mutate outputs.
+    try:
+        man_data = load_extraction_manifest(man_path)
+    except ValueError as exc:
+        die(str(exc))
 
     if outfile.exists() and not args.force:
         die(f"输出已存在：{outfile}\n"
@@ -726,7 +747,8 @@ def main():
         print(f"[dry-run] 输入SHA256={digest}")
         print(f"[dry-run] 输出SHA256={meta['out_sha256']}")
         print(f"[dry-run] source.txt：{outdir / 'source.txt'}")
-        print(f"[dry-run] extraction-manifest.json：{outdir / 'extraction-manifest.json'}")
+        print(f"[dry-run] extraction-manifest.json：{man_path}"
+              f"（已有 {len(man_data['extractions'])} 条）")
         return
 
     outdir.mkdir(parents=True, exist_ok=True)
@@ -739,12 +761,12 @@ def main():
 
     atomic_write_text(outfile, text)
     action = update_source_txt(outdir, meta, dry_run=False)
-    man = update_extraction_manifest(outdir, meta, dry_run=False)
+    man = append_extraction_manifest(outdir, meta, man_data, dry_run=False)
     print(f"✅ 提取完成：{outfile}（{meta['chars']} 字，{meta['range']}）")
     print(f"   输入SHA256={digest}")
     print(f"   输出SHA256={meta['out_sha256']}")
     print(f"   source.txt {action}：{outdir / 'source.txt'}")
-    print(f"   extraction-manifest.json {man}：{outdir / 'extraction-manifest.json'}")
+    print(f"   extraction-manifest.json {man}：{man_path}")
 
 
 if __name__ == "__main__":
