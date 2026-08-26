@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""extract_book.py unittest — fixtures 全部生成在 TemporaryDirectory，不碰仓库、不 rm -rf。"""
+"""extract_book.py unittest — fixtures 全部生成在 TemporaryDirectory。"""
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 import sys
 import tempfile
@@ -36,7 +37,8 @@ class ExtractBookTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls._tmp.cleanup()  # tempfile API，不是 shell rm -rf
+        # Controlled temp dir created by tempfile; not a shell rm -rf of user paths.
+        cls._tmp.cleanup()
 
     def test_help(self):
         r = run(["--help"])
@@ -55,8 +57,13 @@ class ExtractBookTests(unittest.TestCase):
         self.assertNotIn("环境的杠杆", text)
         src = (out / "source.txt").read_text(encoding="utf-8")
         self.assertIn("书名：微型习惯手册", src)
-        self.assertIn("来源SHA256：", src)
-        self.assertIn("范围：章节段 4", src)
+        self.assertIn("输入SHA256：", src)
+        self.assertIn("输出SHA256：", src)
+        self.assertNotIn("来源SHA256：", src)
+        man = json.loads((out / "extraction-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(man["extractions"]), 1)
+        self.assertEqual(man["latest"]["input_sha256"],
+                         hashlib.sha256(self.txt.read_bytes()).hexdigest())
 
     def test_epub_meta_range_and_append(self):
         out = Path(self._tmp.name) / "out-epub"
@@ -70,10 +77,28 @@ class ExtractBookTests(unittest.TestCase):
         self.assertNotIn("身份的复利", text)
         src = (out / "source.txt").read_text(encoding="utf-8")
         self.assertIn("作者：测试员", src)
-        # second extract with different --name appends source record
         run([str(self.epub), "--out", str(out), "--chapters", "3", "--name", "原文-ch3.txt"])
         src2 = (out / "source.txt").read_text(encoding="utf-8")
         self.assertEqual(src2.count("extract_book.py"), 2)
+        man = json.loads((out / "extraction-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(man["extractions"]), 2)
+
+    def test_multi_source_full_hashes(self):
+        """EPUB then TXT: both full input hashes must remain recoverable."""
+        out = Path(self._tmp.name) / "out-multi"
+        epub_sha = hashlib.sha256(self.epub.read_bytes()).hexdigest()
+        txt_sha = hashlib.sha256(self.txt.read_bytes()).hexdigest()
+        run([str(self.epub), "--out", str(out), "--chapters", "1", "--name", "原文-epub.txt"])
+        run([str(self.txt), "--out", str(out), "--chapters", "4", "--name", "原文-txt.txt",
+             "--title", "微型习惯手册"])
+        src = (out / "source.txt").read_text(encoding="utf-8")
+        self.assertIn(f"输入SHA256：{epub_sha}", src)
+        self.assertIn(f"输入SHA256：{txt_sha}", src)
+        self.assertNotIn("来源SHA256：", src)
+        man = json.loads((out / "extraction-manifest.json").read_text(encoding="utf-8"))
+        hashes = {e["input_sha256"] for e in man["extractions"]}
+        self.assertEqual(hashes, {epub_sha, txt_sha})
+        self.assertEqual(man["latest"]["input_sha256"], txt_sha)
 
     def test_pdf_page_range(self):
         out = Path(self._tmp.name) / "out-pdf"
@@ -84,11 +109,20 @@ class ExtractBookTests(unittest.TestCase):
         text = (out / "原文.txt").read_text(encoding="utf-8")
         self.assertIn("Page two marker", text)
         self.assertNotIn("Chapter one", text)
-        self.assertIn("sample.pdf（pdf", (out / "source.txt").read_text(encoding="utf-8"))
 
     def test_max_chars_truncation(self):
         r = run([str(self.txt), "--max-chars", "260"])
         self.assertIn("[已截断", r.stdout)
+
+    def test_reject_negative_max_chars(self):
+        r = run([str(self.txt), "--max-chars", "-1"], check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--max-chars", r.stderr)
+
+    def test_reject_directory_source(self):
+        r = run([str(self.fix), "--list"], check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("必须是文件", r.stderr)
 
     def test_refuse_overwrite_without_force(self):
         out = Path(self._tmp.name) / "out-ow"
@@ -98,12 +132,15 @@ class ExtractBookTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("输出已存在", r.stderr)
 
-    def test_force_backup(self):
+    def test_force_backup_nested_name(self):
         out = Path(self._tmp.name) / "out-force"
-        run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t1"])
-        run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t2", "--force"])
-        self.assertTrue((out / "原文.txt").exists())
-        self.assertTrue((out / "原文.txt.bak").exists())
+        run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t1",
+             "--name", "nested/原文.txt"])
+        run([str(self.txt), "--out", str(out), "--chapters", "4", "--title", "t2",
+             "--name", "nested/原文.txt", "--force"])
+        self.assertTrue((out / "nested" / "原文.txt").exists())
+        self.assertTrue((out / "nested" / "原文.txt.bak").exists())
+        self.assertFalse((out / "原文.txt.bak").exists())
 
     def test_dry_run_no_write(self):
         out = Path(self._tmp.name) / "out-dry"
@@ -125,7 +162,9 @@ class ExtractBookTests(unittest.TestCase):
         digest = hashlib.sha256(self.epub.read_bytes()).hexdigest()
         run([str(self.epub), "--out", str(out), "--chapters", "1"])
         src = (out / "source.txt").read_text(encoding="utf-8")
-        self.assertIn(f"来源SHA256：{digest}", src)
+        self.assertIn(f"输入SHA256：{digest}", src)
+        man = json.loads((out / "extraction-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["latest"]["input_sha256"], digest)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@
 # - 版权纪律：只提取要讲的范围；source.txt 记清书名/作者/来源/讲书范围。
 import argparse
 import hashlib
+import json
 import os
 import posixpath
 import re
@@ -554,46 +555,87 @@ def assemble(book: dict, picked: list, meta: dict, max_chars: int):
 
 
 def update_source_txt(outdir: Path, meta: dict, dry_run: bool = False):
+    """Human-readable summary. Each extraction record holds FULL hashes (no single stale top hash)."""
     p = outdir / "source.txt"
-    record = (f"{meta['stamp']} · extract_book.py · {meta['src']}（{meta['fmt']}）"
-              f" · sha256={meta['sha256'][:16]}…"
-              f" · 范围：{meta['range']} · {meta['chars']} 字 → {meta['outname']}")
+    record = (
+        f"{meta['stamp']} · extract_book.py\n"
+        f"  输入路径：{meta['src_path']}\n"
+        f"  输入格式：{meta['fmt']}\n"
+        f"  输入SHA256：{meta['sha256']}\n"
+        f"  输出文件：{meta['outname']}\n"
+        f"  输出SHA256：{meta['out_sha256']}\n"
+        f"  提取范围：{meta['range']}\n"
+        f"  字数：{meta['chars']}\n"
+    )
     if not p.exists():
         content = (
             f"书名：{meta['title']}\n"
             f"作者：{meta['author'] or '（待补）'}\n"
             f"ISBN：（待补）\n"
-            f"素材来源：{meta['src']}（{meta['fmt']}，用户提供）\n"
-            f"来源SHA256：{meta['sha256']}\n"
-            f"讲书范围：{meta['range']}\n"
-            f"\n--- 提取记录 ---\n{record}\n"
+            f"素材说明：用户提供；每次提取的完整哈希见下方「提取记录」"
+            f"（勿把单次哈希当成全书唯一真源）。\n"
+            f"讲书范围（最近一次）：{meta['range']}\n"
+            f"\n--- 提取记录 ---\n{record}"
         )
         if dry_run:
             return "将创建（dry-run）"
         atomic_write_text(p, content)
         return "已创建"
     cur = p.read_text(encoding="utf-8")
-    if "来源SHA256：" not in cur and "--- 提取记录 ---" in cur:
-        # 旧文件补一行哈希（插在讲书范围后 / 提取记录前）
-        cur = cur.replace("--- 提取记录 ---",
-                          f"来源SHA256：{meta['sha256']}\n\n--- 提取记录 ---", 1)
-    elif "来源SHA256：" not in cur:
-        cur = cur.rstrip("\n") + f"\n来源SHA256：{meta['sha256']}\n"
+    # Drop legacy single-value 来源SHA256 so it cannot contradict later sources
+    cur = re.sub(r"^来源SHA256：.*\n?", "", cur, flags=re.M)
     if "--- 提取记录 ---" not in cur:
         cur = cur.rstrip("\n") + "\n\n--- 提取记录 ---\n"
     elif not cur.endswith("\n"):
         cur += "\n"
+    # Refresh「最近一次」范围提示 if present
+    cur = re.sub(r"^讲书范围（最近一次）：.*$",
+                 f"讲书范围（最近一次）：{meta['range']}", cur, count=1, flags=re.M)
     if dry_run:
         return "将追加提取记录（dry-run）"
-    atomic_write_text(p, cur + record + "\n")
+    atomic_write_text(p, cur + record)
     return "已追加提取记录"
+
+
+def update_extraction_manifest(outdir: Path, meta: dict, dry_run: bool = False):
+    """Machine-readable provenance for source_lock / content-package transplant."""
+    p = outdir / "extraction-manifest.json"
+    entry = {
+        "stamp": meta["stamp"],
+        "tool": "extract_book.py",
+        "input_path": meta["src_path"],
+        "input_name": meta["src"],
+        "input_format": meta["fmt"],
+        "input_sha256": meta["sha256"],
+        "output_file": meta["outname"],
+        "output_sha256": meta["out_sha256"],
+        "range": meta["range"],
+        "chars": meta["chars"],
+        "title": meta["title"],
+        "author": meta["author"],
+    }
+    if dry_run:
+        return "将写入（dry-run）"
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = {"extractions": []}
+    else:
+        data = {"extractions": []}
+    if not isinstance(data.get("extractions"), list):
+        data["extractions"] = []
+    data["extractions"].append(entry)
+    data["latest"] = entry
+    atomic_write_text(p, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    return "已更新"
 
 
 def main():
     ap = argparse.ArgumentParser(
         prog="extract_book.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="书源提取：epub / pdf / txt / md → 干净纯文本 + source.txt 元数据。\n"
+        description="书源提取：epub / pdf / txt / md → 干净纯文本 + source.txt + extraction-manifest.json。\n"
                     "配合 book-narration-video Phase 0：先 --list 看目录，再按范围提取。",
         epilog="示例：\n"
                "  python3 extract_book.py 书.epub --list\n"
@@ -605,7 +647,7 @@ def main():
     ap.add_argument("--chapters", help="章节范围（epub/txt/md），如 2-5 / 1,3,7-9 / 3-")
     ap.add_argument("--pages", help="页码范围（仅 pdf），格式同 --chapters")
     ap.add_argument("--max-chars", type=int, default=DEFAULT_MAX_CHARS,
-                    help=f"最多提取字符数，默认 {DEFAULT_MAX_CHARS}，0=不限")
+                    help=f"最多提取字符数，默认 {DEFAULT_MAX_CHARS}，0=不限，禁止负数")
     ap.add_argument("--title", default="", help="书名（写进 source.txt）")
     ap.add_argument("--author", default="", help="作者（写进 source.txt）")
     ap.add_argument("--name", default="原文.txt",
@@ -617,9 +659,15 @@ def main():
                     help="允许覆盖已存在的输出文件（默认拒绝覆盖；覆盖前先 .bak）")
     args = ap.parse_args()
 
-    src = Path(args.source)
+    if args.max_chars < 0:
+        ap.error("--max-chars 必须 >= 0（0=不限）")
+
+    src = Path(args.source).expanduser()
     if not src.exists():
         die(f"找不到书源文件：{src}")
+    if not src.is_file():
+        die(f"书源必须是文件，不能是目录：{src}")
+    src = src.resolve()
     fmt = detect_format(src)
     digest = sha256_file(src)
 
@@ -647,17 +695,21 @@ def main():
     meta = {
         "title": args.title or book.get("title") or src.stem,
         "author": args.author or book.get("author", ""),
-        "src": src.name, "fmt": fmt, "range": range_label,
+        "src": src.name,
+        "src_path": str(src),
+        "fmt": fmt,
+        "range": range_label,
         "stamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "outname": args.name,
         "sha256": digest,
     }
-    text, _ = assemble(book, picked, meta, max(0, args.max_chars))
+    text, _ = assemble(book, picked, meta, args.max_chars)
     meta["chars"] = len(text)
+    meta["out_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     if not args.out:
         if args.dry_run:
-            print(f"[dry-run] 将打印到 stdout（{meta['chars']} 字，sha256={digest[:16]}…）")
+            print(f"[dry-run] 将打印到 stdout（{meta['chars']} 字，input_sha256={digest}）")
             return
         print(text)
         return
@@ -671,23 +723,28 @@ def main():
 
     if args.dry_run:
         print(f"[dry-run] 将写入：{outfile}（{meta['chars']} 字，{meta['range']}）")
-        print(f"[dry-run] 来源 sha256={digest}")
+        print(f"[dry-run] 输入SHA256={digest}")
+        print(f"[dry-run] 输出SHA256={meta['out_sha256']}")
         print(f"[dry-run] source.txt：{outdir / 'source.txt'}")
+        print(f"[dry-run] extraction-manifest.json：{outdir / 'extraction-manifest.json'}")
         return
 
     outdir.mkdir(parents=True, exist_ok=True)
     if outfile.exists() and args.force:
-        bak = outfile.with_suffix(outfile.suffix + ".bak")
-        # 备份也必须仍在 outdir 内
-        bak = safe_outfile(outdir, bak.name)
+        # Keep parent dirs: nested/原文.txt → nested/原文.txt.bak
+        bak = outfile.with_name(outfile.name + ".bak")
+        bak = safe_outfile(outdir, str(bak.relative_to(outdir)))
         os.replace(outfile, bak)
-        print(f"⚠️  已存在，备份为 {bak.name}", file=sys.stderr)
+        print(f"⚠️  已存在，备份为 {bak.relative_to(outdir)}", file=sys.stderr)
 
     atomic_write_text(outfile, text)
     action = update_source_txt(outdir, meta, dry_run=False)
+    man = update_extraction_manifest(outdir, meta, dry_run=False)
     print(f"✅ 提取完成：{outfile}（{meta['chars']} 字，{meta['range']}）")
-    print(f"   来源 sha256={digest}")
-    print(f"   source.txt {action}：{outdir / 'source.txt'}（书名/作者/ISBN 留了待补位，记得核对）")
+    print(f"   输入SHA256={digest}")
+    print(f"   输出SHA256={meta['out_sha256']}")
+    print(f"   source.txt {action}：{outdir / 'source.txt'}")
+    print(f"   extraction-manifest.json {man}：{outdir / 'extraction-manifest.json'}")
 
 
 if __name__ == "__main__":

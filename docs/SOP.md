@@ -115,7 +115,7 @@
 - **拆完没翻拍稿/讲书稿、没法成片**：最常见的断链——别漏 **Step 3 写稿**（`口播/<片名>/翻拍稿.md` 或 `讲书稿.md`）。「翻拍角度/讲书角度」只是立场，不是能念的稿。
 - **讲书 book 卡没书封**：检查 `案例库/<book-slug>/cover.jpg`，build 时复制或软链到 `build/news/`。
 - **讲书和翻拍搞混**：给的是视频链接 → video-distill（线 B）；给的是书/章节 → book-narration-video（线 C）。
-- **书源提取**：`SKILL_ROOT="$HOME/.claude/skills/book-narration-video"`；`python3 "$SKILL_ROOT/scripts/extract_book.py" 书.epub --list`，再 `--out 案例库/<slug>/ --chapters 2-5`。覆盖加 `--force`，预览加 `--dry-run`。pdf 优先 `pdftotext`（`brew install poppler`）。测试：`python3 -m unittest "$SKILL_ROOT/scripts/test_extract_book.py" -v`（或 `bash "$SKILL_ROOT/scripts/smoke_test.sh"`）。
+- **书源提取**：`SKILL_ROOT="$HOME/.claude/skills/book-narration-video"`；`python3 "$SKILL_ROOT/scripts/extract_book.py" 书.epub --list`，再 `--out 案例库/<slug>/ --chapters 2-5`。覆盖加 `--force`，预览加 `--dry-run`。测试：`python3 "$SKILL_ROOT/scripts/test_extract_book.py" -v`（或 `bash …/smoke_test.sh`）。
 - **没卡片/没截图**：八成是没稿（→没录音→talking-head-edit 没被触发），或没 gstack `/browse`。先补稿、补素材再成片。
 - **视频号下载**：用 `https://sph.litao.workers.dev/`（`POST /api/fetch_video_profile {"url": 分享链}`）拿明文真链 curl 直下。别上 mitmproxy。需要 gstack `/browse` 驱动解析器。
 - **缺依赖**：`brew install ffmpeg whisper-cpp yt-dlp`；bun 见 install.sh。whisper 模型复用机器已有的。

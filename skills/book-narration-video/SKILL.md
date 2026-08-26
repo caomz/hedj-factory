@@ -48,10 +48,10 @@ SKILL_ROOT="${CLAUDE_SKILL_ROOT:-$HOME/.claude/skills/book-narration-video}"
 python3 "$SKILL_ROOT/scripts/extract_book.py" 书.epub --list
 python3 "$SKILL_ROOT/scripts/extract_book.py" 书.epub --out 案例库/<book-slug>/ --chapters 2-5
 python3 "$SKILL_ROOT/scripts/extract_book.py" 书.pdf  --out 案例库/<book-slug>/ --pages 10-25
-# 已存在原文.txt 时默认拒绝覆盖；确认覆盖加 --force（先备份 .bak）；预览用 --dry-run
+# 已存在原文.txt 时默认拒绝覆盖；确认覆盖加 --force（先备份同目录 .bak）；预览用 --dry-run
 ```
 
-  产出 `案例库/<book-slug>/原文.txt`（带章节分隔符），并自动建/更新 `source.txt`（书名/作者/来源/讲书范围/**来源 SHA-256**，epub 元数据自动读，txt/pdf 用 `--title`/`--author` 补）。长书**先 `--list` 再按范围提取**，脚本默认 `--max-chars 60000` 截断兜底——别一次性塞全书进上下文。pdf 优先走 `pdftotext`（poppler），没装就用内置纯 Python 兜底（简单 pdf 可用；扫描版/复杂排版装 poppler：`brew install poppler` / `apt install poppler-utils`）。`--name` 禁止绝对路径与 `..`，输出必须落在 `--out` 内。
+  产出 `案例库/<book-slug>/原文.txt`（带章节分隔符）、人读 `source.txt`、机器可读 `extraction-manifest.json`（每次提取的**完整**输入/输出 SHA-256 都在记录里，**没有**会被下次覆盖的单值顶部哈希）。epub 元数据自动读，txt/pdf 用 `--title`/`--author` 补。长书**先 `--list` 再按范围提取**，脚本默认 `--max-chars 60000`（禁止负数；`0`=不限）。pdf 优先 `pdftotext`（poppler）。`--name` 禁止绝对路径与 `..`，可含子目录（备份落在同子目录）。
 - **只有书名**：让用户给 3-5 条他最想讲的点 + 一段**他自己确认过的摘录**；或公开书评/目录作**骨架参考**——**不得把二手书评写成「原书主张」**；拆解.md 须标注观点来源（原书摘录 / 用户口述 / 公开书评）。
 - **封面图**：gstack `/browse` 搜书名 + 作者抓权威封面（Amazon/豆瓣/出版社），存 `案例库/<book-slug>/cover.jpg`；没 `/browse` 让用户手动给图。
 
@@ -60,7 +60,7 @@ python3 "$SKILL_ROOT/scripts/extract_book.py" 书.pdf  --out 案例库/<book-slu
 - **解读式讲书**（你的观点 + 书的核心论点 + 少量引用）——主流读书博主形态，优先走这条。
 - **整章/整本朗读**——有版权风险，**默认不做**；用户坚持要朗读式，明确提醒风险并建议只讲摘录+解读。
 - **引用**：金句可引用，注明出处；大段原文照念要克制。
-- 产物 `source.txt` 记清：书名、作者、ISBN（如有）、用户提供的素材来源、讲书范围、**来源文件 SHA-256**。
+- 产物 `source.txt` / `extraction-manifest.json`：书名、作者、ISBN（如有）、每次提取的输入路径与完整 SHA-256、输出文件与输出 SHA-256、讲书范围。
 
 ### Phase 1: 读原文 + 写讲书拆解
 
@@ -192,7 +192,8 @@ Phase 3 写讲书稿也会读「表达 DNA」定调，但产物是**口播脚本
 <工作区>/
 ├── 案例库/<book-slug>/          # 【蒸馏树】每本书一个
 │   ├── cover.jpg                书封（book 卡用）
-│   ├── source.txt               书名/作者/素材来源/讲书范围/来源SHA256（extract_book.py 自动建/更新）
+│   ├── source.txt               人读来源记录（每条提取含完整输入/输出 SHA256）
+│   ├── extraction-manifest.json 机器可读 provenance（接 source_lock / content-package）
 │   ├── 原文.txt                 extract_book.py 提取的书源文本（按范围；覆盖需 --force）
 │   └── 拆解.md                  ★讲书角度/骨架/金句
 └── 口播/<片名>/                 # 【生产树】每条讲书成片一个
@@ -225,4 +226,22 @@ Phase 3 写讲书稿也会读「表达 DNA」定调，但产物是**口播脚本
 - **输出已存在 / 路径报错**：默认拒绝覆盖；加 `--force` 会先备份 `.bak`。`--name` 不能含 `..` 或绝对路径。预览用 `--dry-run`。
 - **pdf 提取出来是空/乱码**：多半是扫描版（要 OCR，本脚本不管）或没装 poppler——`brew install poppler` / `apt install poppler-utils` 后重跑；内置纯 Python 兜底只吃简单 pdf。
 - **和 video-distill 抢触发**：用户给的是**书**不是**视频链接**才用本 skill；给抖音/视频号链接 → video-distill。
-- **测试**：`python3 -m unittest "$SKILL_ROOT/scripts/test_extract_book.py" -v`（fixture 只进临时目录）。
+- **测试**：`python3 "$SKILL_ROOT/scripts/test_extract_book.py" -v`（或 `bash "$SKILL_ROOT/scripts/smoke_test.sh"`；勿用 `python -m unittest /abs/path`）。
+
+---
+
+## 移植到 content-package v2 / 状态机版（衔接备忘）
+
+本仓库 GitHub `main` 暂无 `source_lock.py`；若你本地已是状态机版，**不要整文件覆盖 SKILL**。建议只移植 `extract_book.py` + 测试，并按下列映射接线：
+
+| 本 skill 产物 | 状态机接法 |
+|---|---|
+| `extraction-manifest.json` 的 `input_sha256` | 上游 provenance |
+| `案例库/<slug>/原文.txt` | `source_lock.py create … --source … --source-type adapted` |
+| `source.txt` | 人读记录，**不作**状态真源 |
+| `拆解.md` | → 项目内 `制作准备.md` / `artifacts.brief` |
+| `讲书稿.md` | → **统一为** `口播/<项目>/口播稿.md`（勿并存两个正式稿名） |
+| `cover.jpg` | 独立参考素材 |
+| `平台文案.md` | `artifacts.platform_copy` |
+
+健康内容另加 `--risk-domain health`（以本地 CLI 为准）。
