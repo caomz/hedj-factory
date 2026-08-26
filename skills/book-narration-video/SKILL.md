@@ -232,7 +232,15 @@ Phase 3 写讲书稿也会读「表达 DNA」定调，但产物是**口播脚本
 
 ## 移植到 content-package v2 / 状态机版（衔接备忘）
 
-本仓库 GitHub `main` 暂无 `source_lock.py`；若你本地已是状态机版，**不要整文件覆盖 SKILL**。建议只移植 `extract_book.py` + 测试，并按下列映射接线：
+**完整步骤与文件清单**见：[references/transplant-to-state-machine.md](references/transplant-to-state-machine.md)。
+
+本仓库 GitHub `main` 暂无 `source_lock.py`；若你本地已是状态机版，**不要整文件覆盖 SKILL**，也**不要** `git merge` Cloud `main`。建议：
+
+```bash
+# 打包可拷贝文件（在 Cloud clone）
+python3 skills/book-narration-video/scripts/pack_transplant_bundle.py --out /tmp/book-extract-bundle
+# 或在本地状态机仓库：git fetch + checkout 仅 scripts（见 reference）
+```
 
 | 本 skill 产物 | 状态机接法 |
 |---|---|
