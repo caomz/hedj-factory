@@ -9,6 +9,8 @@
   {"query": "这条视频号我想整个搬成我的版本：拆解 + 剪个成片 + 全平台标题文案，一条龙搞定", "should_trigger": true},
   {"query": "set me up end to end on the remake pipeline, distill my own voice first then i'll start remaking competitor videos", "should_trigger": true},
   {"query": "我对标的这个号 https://www.xiaohongshu.com/user/xxxx 我要照着它的爆款逻辑产出我自己风格的成片和文案，帮我把流程跑起来", "should_trigger": true},
+  {"query": "把《原子习惯》做成讲书视频，完整链路，成片+四平台文案+发号", "should_trigger": true},
+  {"query": "讲一本书做成我自己口吻的口播成片和文案，一条龙走一遍", "should_trigger": true},
   {"query": "把这个 mp4 的字幕用 whisper 提取出来，我只要 srt 文件", "should_trigger": false},
   {"query": "蒸馏一下李尚龙这个人，我想要一个能模仿他思维方式的顾问 skill", "should_trigger": false},
   {"query": "帮我拆解这条爆款的叙事结构，分析它为什么火，我先研究研究不急着翻", "should_trigger": false},

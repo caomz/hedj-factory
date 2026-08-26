@@ -25,9 +25,9 @@
 
 ```
 01 蒸馏自己(一次性)  女娲读你全部过往表达 ──► 你的观点 + 语气 + 口头禅 → profile
-02 寻找爆款          全网找被验证的对标 → 下载 → whisper 转写 → 拆解它为什么火
+02 寻找爆款 / 选书     对标视频 → 下载转写拆解；或一本书 → 讲书拆解
 03 共写内容稿        它出结构,你出观点 → 个人元素审计 → 换成你的观点与口吻 → 黄金5秒 hook
-04 素材 / 成片       自动搜素材、截图、剪辑 → hyperframes 渲染(口播走 talking-head-edit)
+04 素材 / 成片       自动搜素材、截图、剪辑 → hyperframes 渲染(口播走 talking-head-edit,讲书密集 book 卡)
 05 Headless 发布     一键发抖音 / 小红书 / 视频号(发前显式确认)
 ```
 
@@ -35,6 +35,7 @@
 
 - **第一次用** → 「帮我 onboarding」→ 查依赖 + 女娲蒸馏**你自己**,产出你的 profile
 - **做一条** → 「我要翻拍这条视频 `<对标链接>`,做成我自己口吻的成片和文案」
+- **讲一本书** → 「把 `<书名>` 做成讲书视频,我自己口吻的成片和文案」
 - **发出去** → 「把这条成片发到抖音/小红书/视频号」
 
 完整流程和「为什么这么设计」见 [`docs/SOP.md`](docs/SOP.md)。
@@ -85,8 +86,9 @@ git clone https://github.com/dreammis/social-auto-upload.git && cd social-auto-u
 | # | 层 | skill | 你出现吗 |
 |---|-----|-------|:---:|
 | 01 | 蒸馏自己 → profile | [nuwa-skill](https://github.com/CLAWVARDLABS/nuwa-skill)(女娲) | ● 一次性 |
-| 02 | 寻找爆款(取片/转写/拆解) | `video-distill` | |
-| 03 | 共写内容稿(它出结构,你出观点) | `video-distill` + 你的 profile | ● 每条 |
+| 02a | 寻找爆款(取片/转写/拆解) | `video-distill` | |
+| 02b | 选书讲书(书源/讲书拆解) | `book-narration-video` | |
+| 03 | 共写内容稿(它出结构,你出观点) | `video-distill` / `book-narration-video` + 你的 profile | ● 每条 |
 | 04 | 素材 / B-roll / 成片 | `talking-head-edit` / `hyperframes` | |
 | 05 | Headless 发布(抖音/小红书/视频号) | [social-auto-upload](https://github.com/dreammis/social-auto-upload) | 发前确认 |
 
